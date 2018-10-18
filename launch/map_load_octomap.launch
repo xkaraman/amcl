@@ -1,0 +1,7 @@
+<launch>
+
+	<arg name="map_file" default="$(find amcl_lib_pf)/maps/corridor/corridor.ot"/>
+	<node name="octomap_server" pkg="octomap_server" type="octomap_server_node" args="$(arg map_file)"/> 
+
+</launch>
+

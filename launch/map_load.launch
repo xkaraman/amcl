@@ -1,0 +1,8 @@
+<launch>
+
+  	<arg name="map_file" default="$(find amcl_lib_pf)/maps/corridor/corridor.yaml"/>
+	<node name="map_server" pkg="map_server" type="map_server" output="screen" args="$(arg map_file)"/>
+
+	<!-- node name="tf_static" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0  /map /odom 100" /-->
+</launch>
+

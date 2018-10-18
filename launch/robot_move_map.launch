@@ -1,0 +1,34 @@
+<launch> 
+	<!-- Create a folder named as the name of .world and .yaml under package/maps folder
+		 Example: World named "myworld.world"
+		 		  Map named "myworld.yaml"
+		 		  Octomap named "myworld.ot"
+		 		  package_folder = path/to/amcl_lib_pf
+		 		  Place these files in the folder path/to/amcl_lib_pf/maps/myworld  -->
+	<arg name="map" default="corridor"/>
+	<arg name="map_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).yaml"/>
+	<arg name="world_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).world"/>
+	<arg name="octomap_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).ot"/>
+		
+	<!-- Launch world in gazebo with turtlebot already there -->		
+	<include file="$(find amcl_lib_pf)/launch/willow-with-turtlebot.launch">
+		<arg name="world_file" value="$(arg world_file)"/>
+	</include>
+	
+	<!-- Load 2D Occupancy Map -->
+	<include file="$(find amcl_lib_pf)/launch/map_load.launch">
+		<arg name="map_file" value="$(arg map_file)"/>
+	</include>
+
+	<!-- Load 3D Octomap Map -->
+	<include file="$(find amcl_lib_pf)/launch/map_load_octomap.launch">
+		<arg name="map_file" value="$(arg octomap_file)"/>
+	</include>
+
+	<!-- Launch turtlebot_navigation move_base with overiden parameters -->  
+	<!--
+	<include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/>
+	<rosparam file="$(find amcl_lib_pf)/launch/param/dwa_local_planner_params.yaml" command="load" />
+	<rosparam file="$(find amcl_lib_pf)/launch/param/navfn_global_planner_params.yaml" command="load" />
+  -->
+</launch>
