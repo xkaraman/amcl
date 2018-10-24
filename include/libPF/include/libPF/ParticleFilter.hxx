@@ -190,7 +190,7 @@ void ParticleFilter<StateType>::resample() {
 
 template <class StateType>
 void ParticleFilter<StateType>::drift(double dt) {
-#pragma	omp for
+#pragma	omp parallel for
 	for (unsigned int i = 0; i < m_NumParticles; i++) {
     m_MovementModel->drift(m_CurrentList[i]->m_State, dt);
   }
@@ -198,7 +198,7 @@ void ParticleFilter<StateType>::drift(double dt) {
 
 template <class StateType>
 void ParticleFilter<StateType>::diffuse(double dt) {
-#pragma	omp for
+#pragma	omp parallel for
   for (unsigned int i = 0; i < m_NumParticles; i++) {
     m_MovementModel->diffuse(m_CurrentList[i]->m_State, dt);
   }
@@ -206,7 +206,7 @@ void ParticleFilter<StateType>::diffuse(double dt) {
 
 template <class StateType>
 void ParticleFilter<StateType>::measure() {
-#pragma	omp for
+#pragma	omp parallel for
   for (unsigned int i = 0; i < m_NumParticles; i++) {
     // apply observation model
     double weight = m_ObservationModel->measure(m_CurrentList[i]->getState());

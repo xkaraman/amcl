@@ -57,7 +57,9 @@ catkin_package(
 include_directories(
  include
  ${catkin_INCLUDE_DIRS}
- src include/libPF/include
+ src 
+ include/libPF/include
+ include/libColor/src
 )
 
 set(amcl_lib_pf_SOURCES 

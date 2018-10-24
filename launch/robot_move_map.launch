@@ -1,10 +1,11 @@
 <launch> 
 	<!-- Create a folder named as the name of .world and .yaml under package/maps folder
 		 Example: World named "myworld.world"
-		 		  Map named "myworld.yaml"
+		 		  Map named "myworld.yaml" along with its png
 		 		  Octomap named "myworld.ot"
 		 		  package_folder = path/to/amcl_lib_pf
-		 		  Place these files in the folder path/to/amcl_lib_pf/maps/myworld  -->
+		 		  Place these files in the folder path/to/amcl_lib_pf/maps/myworld
+		 		  Launch via roslaunch amcl_lib_pf robot_move_map map:=myworld  -->
 	<arg name="map" default="corridor"/>
 	<arg name="map_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).yaml"/>
 	<arg name="world_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).world"/>
@@ -26,9 +27,13 @@
 	</include>
 
 	<!-- Launch turtlebot_navigation move_base with overiden parameters -->  
-	<!--
+	
 	<include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/>
 	<rosparam file="$(find amcl_lib_pf)/launch/param/dwa_local_planner_params.yaml" command="load" />
 	<rosparam file="$(find amcl_lib_pf)/launch/param/navfn_global_planner_params.yaml" command="load" />
-  -->
+
+  
+  <!-- Convert RGB image to PointCloud -->
+  	<include file="$(find amcl_lib_pf)/launch/rgb_to_pointcloud.launch"/>
+  
 </launch>

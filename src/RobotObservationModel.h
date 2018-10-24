@@ -12,7 +12,10 @@
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-typedef pcl::PointCloud< pcl::PointXYZ > PointCloud;
+typedef pcl::PointXYZ PointT;
+typedef pcl::PointXYZRGB PointRGBT;
+typedef pcl::PointCloud< PointT > PointCloud;
+typedef pcl::PointCloud< PointRGBT > PointCloudRGB;
 
 /** 
  * @class RobotObservationModel
@@ -45,14 +48,14 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
      * Set the map in ColorOcTree Octomap Structure
      * @param map Map to be saved
      */
-    void setMap(std::shared_ptr<octomap::ColorOcTree> map);
+    void setMap(const std::shared_ptr<octomap::ColorOcTree> &map);
 
     /**
      * Set the transfrom between "base"->"target_sensor" TF frame
      * @param baseToSensor Transform between base and sensor frame;
      *
      */
-    void setBaseToSensorTransform(tf2::Transform baseToSensor);
+    void setBaseToSensorTransform(const tf2::Transform &baseToSensor);
 
     /**
      * Set the measuremenets received from sensors along with their respective range from
@@ -60,7 +63,20 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
      * @param observed The measurements received from sensors in PoinctCloud (PCL Library)
      * @param ranges The ranges of each Point in PointCloud from the source of origin
      */
-    void setObservedMeasurements(PointCloud observed,std::vector<float> ranges);
+    void setObservedMeasurements(const PointCloud &observed,const std::vector<float> &ranges);
+
+    /**
+     * Set the measuremenets received from sensors along with their respective range from
+     * point of origin
+     * @param observed The measurements received from sensors in PoinctCloud (PCL Library)
+     * @param ranges The ranges of each Point in PointCloud from the source of origin
+     */
+    void setObservedMeasurements(const PointCloudRGB &observed,const std::vector<float> &ranges);
+
+    /**
+     * Set if the measurements involve RGB points
+     */
+    void setRGB(const bool &rgb);
 
     void setTrueCarState(const RobotState& state);
 
@@ -75,15 +91,16 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
     std::shared_ptr<octomap::ColorOcTree> m_Map;
 
     PointCloud m_observedMeasurement;
+	PointCloudRGB m_observedMeasurementRGB;
     std::vector<float> m_observedRanges;
 
+    bool m_RGB;
     double m_ZHit;
     double m_ZShort;
     double m_ZRand;
     double m_ZMax;
     double m_SigmaHit;
     double m_LambdaShort;
-
 };
 
 #endif

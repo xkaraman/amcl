@@ -23,6 +23,7 @@
 #include <RobotState.h>
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/Image.h>
 #include <tf2/LinearMath/Transform.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/message_filter.h>
@@ -42,11 +43,14 @@ class TransformBroadcaster;
 class MapModel;
 
 typedef pcl::PointXYZ PointT;
+typedef pcl::PointXYZRGB PointRGBT;
 typedef pcl::PointCloud< PointT > PointCloud;
+typedef pcl::PointCloud< PointRGBT > PointCloudRGB;
 
 class AMCLDepth {
 public:
 	AMCLDepth();
+
 	virtual ~AMCLDepth();
 
 	void publishPoses(const ros::Time &t);
@@ -61,9 +65,13 @@ public:
 
 	void depthCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
 
+	void rgbCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
+
 	void prepareLaserPointCloud(const sensor_msgs::LaserScanConstPtr &laser,PointCloud &pc,std::vector<float> &ranges) const;
 
-	void prepareDepthPointCloud(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloud &pc, std::vector<float> &ranges) const;
+	void prepareDepthPointCloud(const sensor_msgs::PointCloud2ConstPtr &msg, PointCloud &pc, std::vector<float> &ranges) const;
+
+	void prepareRGBPointCloud(const sensor_msgs::PointCloud2ConstPtr &msg, PointCloudRGB &pc, std::vector<float> &ranges) const;
 
 	void latestTimerCallback(const ros::TimerEvent &e) const;
 
@@ -111,14 +119,19 @@ private:
 	message_filters::Subscriber<sensor_msgs::PointCloud2> *m_DepthScanSub;
 	tf2_ros::MessageFilter<sensor_msgs::PointCloud2> *m_DepthScanFilter;
 
+	message_filters::Subscriber<sensor_msgs::PointCloud2> *m_RGBScanSub;
+	tf2_ros::MessageFilter<sensor_msgs::PointCloud2> *m_RGBScanFilter;
+
 	message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped> *m_InitPoseSub;
 	tf2_ros::MessageFilter<geometry_msgs::PoseWithCovarianceStamped> *m_InitPoseFilter;
 
 	bool m_Initialized;
 	ros::Time m_LastLaserTime;
 	ros::Time m_LastDepthCloudTime;
+	ros::Time m_LastRGBCloudTime;
 	bool m_LaserIntegrated;
 	bool m_DepthIntegrated;
+	bool m_RGBIntegrated;
 
 	bool m_ReceivedSensorData;
 	bool m_FirstRun;
