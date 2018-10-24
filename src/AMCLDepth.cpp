@@ -295,7 +295,7 @@ void AMCLDepth::prepareLaserPointCloud(
 	cloudPtr.reset(new pcl::PointCloud<pcl::PointXYZ>(pc));
 	uniformSampling.setInputCloud(cloudPtr);
 	// TODO Add as Parameter
-	double m_SensorSampleDist = 0.1;
+	double m_SensorSampleDist = 0.2;
 	uniformSampling.setRadiusSearch(m_SensorSampleDist);
 	pcl::PointCloud<int> sampledIndices;
 	uniformSampling.compute(sampledIndices);
