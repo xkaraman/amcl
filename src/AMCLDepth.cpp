@@ -53,9 +53,11 @@
 #include <pcl/segmentation/sac_segmentation.h>
 
 AMCLDepth::AMCLDepth() :
-		m_NumberOfParticles(150), m_MapFrameID("map"), m_OdomFrameID("odom"), m_BaseFrameID(
-				"base_footprint"), m_ReceivedSensorData(false), m_FirstRun(
-				true), m_TFBuffer(ros::Duration(60), false) {
+		m_NumberOfParticles(150),
+		m_MapFrameID("map"), m_OdomFrameID("odom"), m_BaseFrameID("base_footprint"),
+		m_ReceivedSensorData(false), m_FirstRun(true),
+		m_TFBuffer(ros::Duration(60), false) {
+
 	// Models Used in Particle Filters
 	m_MapModel = std::shared_ptr<MapModel>(new OccupancyMap(&m_NH));
 //	m_MotionModel = std::shared_ptr<libPF::MovementModel<RobotState> >(new RobotMovementModel(&m_NH,&m_TFBuffer,"odom","map"));
@@ -95,7 +97,7 @@ AMCLDepth::AMCLDepth() :
 			m_NH, "/scan", 100);
 	m_LaserScanFilter = new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(
 			*m_LaserScanSub, m_TFBuffer, m_OdomFrameID, 100, m_NH);
-	m_LaserScanFilter->registerCallback(boost::bind(&AMCLDepth::laserCallback,this,_1));
+//	m_LaserScanFilter->registerCallback(boost::bind(&AMCLDepth::laserCallback,this,_1));
 
 	m_DepthScanSub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(
 			m_NH, "/camera/depth/points", 100);
@@ -107,8 +109,7 @@ AMCLDepth::AMCLDepth() :
 			"/rgb/points", 100);
 	m_RGBScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(*m_RGBScanSub,
 			m_TFBuffer, m_OdomFrameID, 100, m_NH);
-	m_RGBScanFilter->registerCallback(
-			boost::bind(&AMCLDepth::rgbCallback, this, _1));
+	m_RGBScanFilter->registerCallback(boost::bind(&AMCLDepth::rgbCallback, this, _1));
 
 	m_InitPoseSub = new message_filters::Subscriber<
 			geometry_msgs::PoseWithCovarianceStamped>(m_NH, "initialpose", 2);
@@ -405,6 +406,7 @@ void AMCLDepth::depthCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 
 			// TODO Publish filtered PointCloud
 
+			m_ObservationModel->setRGB(false);
 			m_ObservationModel->setBaseToSensorTransform(baseToSensor);
 			m_ObservationModel->setObservedMeasurements(pcFiltered,
 					laserRanges);
@@ -610,9 +612,9 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 
 	m_MotionModel->setLastOdomPose(odomPose);
 	m_FirstRun = false;
-	m_LastDepthCloudTime = tArrived;
+	m_LastRGBCloudTime = tArrived;
 
-	publishPoses(m_LastDepthCloudTime);
+	publishPoses(m_LastRGBCloudTime);
 }
 
 void AMCLDepth::prepareRGBPointCloud(
@@ -639,7 +641,7 @@ void AMCLDepth::prepareRGBPointCloud(
 	// TODO laserMinRange Parameter
 	// TODO laserMaxRange Parameter
 	double m_FilterMinRange = 0.5;
-	double m_FilterMaxRange = 8;
+	double m_FilterMaxRange = 6;
 	pass.setFilterLimits(m_FilterMinRange, m_FilterMaxRange);
 	pass.filter(*pcTemp);
 

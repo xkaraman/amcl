@@ -132,59 +132,59 @@ double RobotObservationModel::measure(const RobotState& state) const {
 	transformMsg = tf2::toMsg(globalLaserOriginTf);
 	Eigen::Affine3d tmp = tf2::transformToEigen(transformMsg);
 
-	if (m_RGB) {
-		PointCloudRGB pcTransformed;
-		pcl::transformPointCloud(m_observedMeasurementRGB, pcTransformed, tmp);
+	PointCloudRGB pcTransformed;
+	pcl::transformPointCloud(m_observedMeasurementRGB, pcTransformed, tmp);
 
-		PointCloudRGB::const_iterator pcIter = pcTransformed.begin();
-		std::vector<float>::const_iterator rangesIter =
-				m_observedRanges.begin();
+	PointCloudRGB::const_iterator pcIter = pcTransformed.begin();
+	std::vector<float>::const_iterator rangesIter =	m_observedRanges.begin();
 
-		double weight = 1.0;
-#pragma omp parallel  for
-		for (; pcIter != pcTransformed.end(); pcIter++, rangesIter++) {
-			// Probability for weight
-			double p = 0.0;
+	double weight = 1.0;
 
-			float obsRange = *rangesIter;
-			float raycastRange;
-			octomap::point3d direction(pcIter->x, pcIter->y, pcIter->z);
-			direction = direction - originP;
+	#pragma omp parallel  for
+	for (; pcIter != pcTransformed.end(); pcIter++, rangesIter++) {
+		// Probability for weight
+		double p = 0.0;
 
-			octomap::point3d end;
+		float obsRange = *rangesIter;
+		float raycastRange;
+		octomap::point3d direction(pcIter->x, pcIter->y, pcIter->z);
+		direction = direction - originP;
 
-			// TODO Set as field Parameter
-			double minRange = 0.5;
-			double maxRange = 8;
+		octomap::point3d end;
 
-			octomap::ColorOcTreeNode *colorNode;
-			if (m_Map->castRay(originP, direction, end, true, 1.5 * maxRange)) {
-				ROS_ASSERT(m_Map->isNodeOccupied(m_Map->search(end)));
-				colorNode = m_Map->search(end);
-				raycastRange = (originP - end).norm();
-			}
+		// TODO Set as field Parameter
+		double minRange = 0.5;
+		double maxRange = 8;
 
-			// Particle in occupied space(??)
-			if(raycastRange == 0 )
-				continue;
+		octomap::ColorOcTreeNode *colorNode;
+		if (m_Map->castRay(originP, direction, end, true, 1.5 * maxRange)) {
+			ROS_ASSERT(m_Map->isNodeOccupied(m_Map->search(end)));
+			colorNode = m_Map->search(end);
+			raycastRange = (originP - end).norm();
+		}
 
-			float z = obsRange - raycastRange;
+		// Particle in occupied space(??)
+		if(raycastRange == 0 )
+			continue;
 
-			// todo check normalization factors in Probabilistics Robotics page 138
-			if (obsRange < maxRange)
-				p += m_ZHit * 1
-						/ (std::sqrt(2 * M_PI * m_SigmaHit * m_SigmaHit))
-						* exp(-(z * z) / (2 * m_SigmaHit * m_SigmaHit));
+		float z = obsRange - raycastRange;
 
-			if (z < 0)
-				p += m_ZShort * m_LambdaShort * exp(-m_LambdaShort * obsRange);
+		// todo check normalization factors in Probabilistics Robotics page 138
+		if (obsRange < maxRange)
+			p += m_ZHit * 1 / (std::sqrt(2 * M_PI * m_SigmaHit * m_SigmaHit))
+							* exp(-(z * z) / (2 * m_SigmaHit * m_SigmaHit));
 
-			if (obsRange >= maxRange)
-				p += m_ZMax * 1.0;
+		if (z < 0)
+			p += m_ZShort * m_LambdaShort * exp(-m_LambdaShort * obsRange);
 
-			if (obsRange < maxRange)
-				p += m_ZRand * 1.0 / maxRange;
+		if (obsRange >= maxRange)
+			p += m_ZMax * 1.0;
 
+		if (obsRange < maxRange)
+			p += m_ZRand * 1.0 / maxRange;
+
+		double colorSimilarity;
+		if(m_RGB && !colorNode){
 			color::rgb<uint8_t> obsColor({pcIter->r,pcIter->g,pcIter->b});
 			color::rgb<uint8_t> raycastColor({colorNode->getColor().r,
 											  colorNode->getColor().g,
@@ -192,23 +192,27 @@ double RobotObservationModel::measure(const RobotState& state) const {
 			// Less is more similar
 			// Greater is not similar
 			// Lower the better
-			double colorSimilarity;
 			colorSimilarity = color::operation::distance < ::color::constant::distance::CIEDE2000_entity>(obsColor,raycastColor); // @suppress("Invalid arguments") // @suppress("Symbol is not resolved")
 
-			// Domain 0 to 1
-//			colorSimilarity = 1 / ( 1 + exp(-colorSimilarity) );
+			// Domain 0 to +inf
+			// Return 0 to 1
 			colorSimilarity = std::tanh(colorSimilarity);
-//			ROS_INFO("Color Similarity [%f]",colorSimiliraty);
-			ROS_ASSERT(p > 0.0);
 			ROS_ASSERT(colorSimilarity >= 0.0);
-			if(colorSimilarity <= 0.0)
-				colorSimilarity = 0.001;
+		}
+
+		ROS_ASSERT(p > 0.0);
+
+		if(!m_RGB){
+			weight *= p;
+		}
+		else {
+			if(colorSimilarity == 0.0)
+				colorSimilarity = 0.01;
 			weight *= p * (1/colorSimilarity);
-		} // END OF LOOP OVER LASER BEAMS
+		}
 
-		//	ROS_INFO("Weight of Particle is [%f]",weight);
-		return weight;
-
+	}
+	return weight;
 //
 //		PointCloudRGB octoMapPointCloud;
 //		// Create PointCloud from Octomap hit Points
@@ -241,71 +245,17 @@ double RobotObservationModel::measure(const RobotState& state) const {
 //		}
 //		computeWeight(pcTransformed,octoMapPointCloud);
 //		return weight;
-	} else {
-		PointCloud pcTransformed;
-		pcl::transformPointCloud(m_observedMeasurement, pcTransformed, tmp);
-
-		// Loop over all Laser Beams
-		PointCloud::const_iterator pcIter = pcTransformed.begin();
-		std::vector<float>::const_iterator rangesIter =
-				m_observedRanges.begin();
-
-		double weight = 1.0;
-//#pragma omp for
-		for (; pcIter != pcTransformed.end(); pcIter++, rangesIter++) {
-			// Probability for weight
-			double p = 0.0;
-
-			float obsRange = *rangesIter;
-			float raycastRange;
-			octomap::point3d direction(pcIter->x, pcIter->y, pcIter->z);
-			direction = direction - originP;
-
-			octomap::point3d end;
-
-			// TODO Set as field Parameter
-			double minRange = 0.5;
-			double maxRange = 8;
-
-			if (m_Map->castRay(originP, direction, end, true, 1.5 * maxRange)) {
-				ROS_ASSERT(m_Map->isNodeOccupied(m_Map->search(end)));
-				raycastRange = (originP - end).norm();
-			}
-
-			float z = obsRange - raycastRange;
-
-			// todo check normalization factors in Probabilistics Robotics page 138
-			if (obsRange < maxRange)
-				p += m_ZHit * 1
-						/ (std::sqrt(2 * M_PI * m_SigmaHit * m_SigmaHit))
-						* exp(-(z * z) / (2 * m_SigmaHit * m_SigmaHit));
-
-			if (z < 0)
-				p += m_ZShort * m_LambdaShort * exp(-m_LambdaShort * obsRange);
-
-			if (obsRange >= maxRange)
-				p += m_ZMax * 1.0;
-
-			if (obsRange < maxRange)
-				p += m_ZRand * 1.0 / maxRange;
-
-			ROS_ASSERT(p > 0.0);
-			weight *= p;
-		} // END OF LOOP OVER LASER BEAMS
-
-//	ROS_INFO("Weight of Particle is [%f]",weight);
-		return weight;
-	}
 }
 
 void RobotObservationModel::setObservedMeasurements(const PointCloud &observed,
 		const std::vector<float> &ranges) {
 	m_observedMeasurement = observed;
+	pcl::copyPointCloud(m_observedMeasurement,m_observedMeasurementRGB);
 	m_observedRanges = ranges;
 }
 
-void RobotObservationModel::setObservedMeasurements(
-		const PointCloudRGB &observed, const std::vector<float> &ranges) {
+void RobotObservationModel::setObservedMeasurements(const PointCloudRGB &observed,
+		const std::vector<float> &ranges) {
 	m_observedMeasurementRGB = observed;
 	m_observedRanges = ranges;
 }

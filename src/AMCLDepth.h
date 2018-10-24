@@ -108,7 +108,6 @@ private:
 	ros::Publisher m_PoseArrayPub;
 	ros::Publisher m_DepthFilteredPub;
 
-	ros::Timer m_Timer;
 	ros::Timer m_LatestTransformTimer;
 
 	ros::ServiceServer m_GlobalLocService;
@@ -125,15 +124,18 @@ private:
 	message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped> *m_InitPoseSub;
 	tf2_ros::MessageFilter<geometry_msgs::PoseWithCovarianceStamped> *m_InitPoseFilter;
 
-	bool m_Initialized;
 	ros::Time m_LastLaserTime;
 	ros::Time m_LastDepthCloudTime;
 	ros::Time m_LastRGBCloudTime;
 	bool m_LaserIntegrated;
 	bool m_DepthIntegrated;
 	bool m_RGBIntegrated;
+	bool m_UseLaser;
+	bool m_UseDepth;
+	bool m_useRGB;
 
 	bool m_ReceivedSensorData;
+	bool m_Initialized;
 	bool m_FirstRun;
 	geometry_msgs::Pose m_LastLocalizedPose;
 };
