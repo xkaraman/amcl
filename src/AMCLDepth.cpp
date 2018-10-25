@@ -58,6 +58,11 @@ AMCLDepth::AMCLDepth() :
 		m_ReceivedSensorData(false), m_FirstRun(true),
 		m_TFBuffer(ros::Duration(60), false) {
 
+	// Get Server Parameters
+	m_NH.param("use_laser",m_UseLaser,true);
+	m_NH.param("use_depth",m_UseDepth,true);
+	m_NH.param("use_rgb",m_useRGB,true);
+
 	// Models Used in Particle Filters
 	m_MapModel = std::shared_ptr<MapModel>(new OccupancyMap(&m_NH));
 //	m_MotionModel = std::shared_ptr<libPF::MovementModel<RobotState> >(new RobotMovementModel(&m_NH,&m_TFBuffer,"odom","map"));
