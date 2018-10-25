@@ -132,7 +132,7 @@ private:
 	bool m_RGBIntegrated;
 	bool m_UseLaser;
 	bool m_UseDepth;
-	bool m_useRGB;
+	bool m_UseRGB;
 
 	bool m_ReceivedSensorData;
 	bool m_Initialized;

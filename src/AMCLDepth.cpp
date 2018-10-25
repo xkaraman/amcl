@@ -61,7 +61,7 @@ AMCLDepth::AMCLDepth() :
 	// Get Server Parameters
 	m_NH.param("use_laser",m_UseLaser,true);
 	m_NH.param("use_depth",m_UseDepth,true);
-	m_NH.param("use_rgb",m_useRGB,true);
+	m_NH.param("use_rgb",m_UseRGB,true);
 
 	// Models Used in Particle Filters
 	m_MapModel = std::shared_ptr<MapModel>(new OccupancyMap(&m_NH));
@@ -102,19 +102,22 @@ AMCLDepth::AMCLDepth() :
 			m_NH, "/scan", 100);
 	m_LaserScanFilter = new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(
 			*m_LaserScanSub, m_TFBuffer, m_OdomFrameID, 100, m_NH);
-//	m_LaserScanFilter->registerCallback(boost::bind(&AMCLDepth::laserCallback,this,_1));
+	if(m_UseLaser)
+		m_LaserScanFilter->registerCallback(boost::bind(&AMCLDepth::laserCallback,this,_1));
 
 	m_DepthScanSub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(
 			m_NH, "/camera/depth/points", 100);
 	m_DepthScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(
 			*m_DepthScanSub, m_TFBuffer, m_OdomFrameID, 100, m_NH);
-//	m_DepthScanFilter->registerCallback(boost::bind(&AMCLDepth::depthCallback,this,_1));
+	if(m_UseDepth)
+		m_DepthScanFilter->registerCallback(boost::bind(&AMCLDepth::depthCallback,this,_1));
 
 	m_RGBScanSub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(m_NH,
 			"/rgb/points", 100);
 	m_RGBScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(*m_RGBScanSub,
 			m_TFBuffer, m_OdomFrameID, 100, m_NH);
-	m_RGBScanFilter->registerCallback(boost::bind(&AMCLDepth::rgbCallback, this, _1));
+	if(m_UseRGB)
+		m_RGBScanFilter->registerCallback(boost::bind(&AMCLDepth::rgbCallback, this, _1));
 
 	m_InitPoseSub = new message_filters::Subscriber<
 			geometry_msgs::PoseWithCovarianceStamped>(m_NH, "initialpose", 2);
@@ -552,7 +555,7 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 			msg->header.stamp.toSec());
 	if (!m_Initialized) {
 		ROS_WARN(
-				"Localization not initialized yet, skipping DepthPointCloud input"
+				"Localization not initialized yet, skipping RGBPointCloud input"
 						"\n (1) Use RVIZ 2D Pose Estimation button or"
 						"\n (2) Publish to /initialpose topic or"
 						"\n (3) Start Global Localization Service");
