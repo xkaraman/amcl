@@ -1,0 +1,10 @@
+<launch>
+  	<arg name="laser"	default="true"/>
+  	<arg name="depth"	default="false"/>
+  	<arg name="rgb"		default="false"/>
+
+	<node name="amcl_node" pkg="amcl_lib_pf" type="amcl_lib_pf_node" output="screen"/>
+	  <param name="use_laser"	type="bool" value="$(arg laser)"/>
+	  <param name="use_depth"	type="bool" value="$(arg depth)"/>
+	  <param name="use_rgb"		type="bool"	value="$(arg rgb)"/>
+</launch>
