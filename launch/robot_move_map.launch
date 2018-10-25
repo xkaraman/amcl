@@ -33,7 +33,4 @@
 	<rosparam file="$(find amcl_lib_pf)/launch/param/navfn_global_planner_params.yaml" command="load" />
 	-->
   
-  <!-- Convert RGB image to PointCloud -->
-  	<include file="$(find amcl_lib_pf)/launch/rgb_to_pointcloud.launch"/>
-  
 </launch>

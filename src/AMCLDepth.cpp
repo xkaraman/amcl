@@ -113,7 +113,7 @@ AMCLDepth::AMCLDepth() :
 		m_DepthScanFilter->registerCallback(boost::bind(&AMCLDepth::depthCallback,this,_1));
 
 	m_RGBScanSub = new message_filters::Subscriber<sensor_msgs::PointCloud2>(m_NH,
-			"/rgb/points", 100);
+			"/camera/depth/points", 100);
 	m_RGBScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(*m_RGBScanSub,
 			m_TFBuffer, m_OdomFrameID, 100, m_NH);
 	if(m_UseRGB)
