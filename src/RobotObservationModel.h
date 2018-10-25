@@ -38,7 +38,7 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
     ~RobotObservationModel();
 
     /**
-     *
+     * Calculate the weight for the current state
      * @param state Reference to the state that has to be weightened.
      * @return weight for the given state.
      */
@@ -78,14 +78,7 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
      */
     void setRGB(const bool &rgb);
 
-    void setTrueCarState(const RobotState& state);
-
-  protected:
-
   private:
-
-    RobotState m_TrueCarState;
-
     tf2::Transform m_BaseToSensorTransform;
 
     std::shared_ptr<octomap::ColorOcTree> m_Map;

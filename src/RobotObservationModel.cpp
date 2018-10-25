@@ -66,8 +66,8 @@ double computeWeight(PointCloudRGB measurement, PointCloudRGB map) {
 	norm_est.setInputCloud(mapCloud);
 	norm_est.compute(*map_normals);
 
-	//SHOT1344
-	//  Compute Descriptor for keypoints
+	// SHOT1344
+	// Compute Descriptor for keypoints
 	//
 	pcl::SHOTColorEstimationOMP<PointRGBT, pcl::Normal, pcl::SHOT1344> descr_est;
 	descr_est.setRadiusSearch(0.02);
@@ -111,6 +111,7 @@ double computeWeight(PointCloudRGB measurement, PointCloudRGB map) {
 	std::cout << "Correspondences found: " << model_scene_corrs->size()
 			<< std::endl;
 
+	return 0.0;
 }
 
 double RobotObservationModel::measure(const RobotState& state) const {
@@ -258,10 +259,6 @@ void RobotObservationModel::setObservedMeasurements(const PointCloudRGB &observe
 		const std::vector<float> &ranges) {
 	m_observedMeasurementRGB = observed;
 	m_observedRanges = ranges;
-}
-
-void RobotObservationModel::setTrueCarState(const RobotState& state) {
-//    m_TrueCarState = state;
 }
 
 void RobotObservationModel::setMap(
