@@ -290,6 +290,7 @@ class ParticleFilter {
      * @return Pointer to particle with index particleNo
      */
     const Particle<StateType>* getParticle(unsigned int particleNo) const;
+    Particle<StateType>* getParticle(unsigned int particleNo) ;
 
     /**
      * Returns a const reference to the state of particle with given index.
@@ -353,7 +354,7 @@ class ParticleFilter {
     ConstParticleIterator particleListEnd();
 
 
-  protected:
+//  protected:
 
     /**
      * This method sorts the particles according to their weight. STL's std::sort() is used together with the

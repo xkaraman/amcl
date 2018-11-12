@@ -17,12 +17,21 @@
 #include <vector>
 
 #include <pcl/common/transforms.h>
-#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/common/common.h>
+//#include <pcl/visualization/cloud_viewer.h>
 
-#include <pcl/features/normal_3d_omp.h>
-#include <pcl/features/shot_omp.h>
+//#include <pcl/features/normal_3d_omp.h>
+//#include <pcl/features/shot_omp.h>
+
+#include <pcl/features/feature.h>
+#include <FeatureMatching.h>
 
 #include <libColor/src/color/color.hpp>
+
+#include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/point_types.h>
 
 RobotObservationModel::RobotObservationModel(ros::NodeHandle *nh,
 		std::shared_ptr<MapModel> mapModel) :
@@ -31,88 +40,91 @@ RobotObservationModel::RobotObservationModel(ros::NodeHandle *nh,
 				m_RGB(false){
 	m_Map = mapModel->getMap();
 	m_BaseToSensorTransform.setIdentity();
+
+	image_pub_ = nh->advertise<sensor_msgs::Image> ("pclToImage", 30);
+
 	ROS_INFO("Robot Observation Model Created!");
 }
 
 RobotObservationModel::~RobotObservationModel() {
 }
 
-double computeWeight(PointCloudRGB measurement, PointCloudRGB map) {
-	pcl::PointCloud<PointRGBT>::Ptr model(
-			new pcl::PointCloud<PointRGBT>(measurement));
-	pcl::PointCloud<PointRGBT>::Ptr model_keypoints(
-			new pcl::PointCloud<PointRGBT>(measurement));
-	pcl::PointCloud<PointRGBT>::Ptr mapCloud(
-			new pcl::PointCloud<PointRGBT>(map));
-	pcl::PointCloud<PointRGBT>::Ptr map_keypoints(
-			new pcl::PointCloud<PointRGBT>(map));
-	pcl::PointCloud<pcl::Normal>::Ptr model_normals(
-			new pcl::PointCloud<pcl::Normal>());
-	pcl::PointCloud<pcl::Normal>::Ptr map_normals(
-			new pcl::PointCloud<pcl::Normal>());
-	pcl::PointCloud<pcl::SHOT1344>::Ptr model_descriptors(
-			new pcl::PointCloud<pcl::SHOT1344>());
-	pcl::PointCloud<pcl::SHOT1344>::Ptr map_descriptors(
-			new pcl::PointCloud<pcl::SHOT1344>());
-
-	//
-	//  Compute Normals
-	//
-	pcl::NormalEstimationOMP<PointRGBT, pcl::Normal> norm_est;
-	norm_est.setRadiusSearch(0.5);
-	norm_est.setInputCloud(model);
-	norm_est.compute(*model_normals);
-
-	norm_est.setInputCloud(mapCloud);
-	norm_est.compute(*map_normals);
-
-	// SHOT1344
-	// Compute Descriptor for keypoints
-	//
-	pcl::SHOTColorEstimationOMP<PointRGBT, pcl::Normal, pcl::SHOT1344> descr_est;
-	descr_est.setRadiusSearch(0.02);
-
-	descr_est.setInputCloud(model_keypoints);
-	descr_est.setInputNormals(model_normals);
-	descr_est.setSearchSurface(model);
-	descr_est.compute(*model_descriptors);
-
-	descr_est.setInputCloud(map_keypoints);
-	descr_est.setInputNormals(map_normals);
-	descr_est.setSearchSurface(mapCloud);
-	descr_est.compute(*map_descriptors);
-
-	//
-	//  Find Model-Scene Correspondences with KdTree
-	//
-	pcl::CorrespondencesPtr model_scene_corrs(new pcl::Correspondences());
-
-	pcl::KdTreeFLANN<pcl::SHOT1344> match_search;
-	match_search.setInputCloud(model_descriptors);
-	// For each scene keypoint descriptor,
-	// find nearest neighbor into the model keypoints descriptor cloud and
-	// add it to the correspondences vector.
-	for (size_t i = 0; i < map_descriptors->size(); ++i) {
-		std::vector<int> neigh_indices(1);
-		std::vector<float> neigh_sqr_dists(1);
-		if (!pcl_isfinite(map_descriptors->at(i).descriptor[0])) //skipping NaNs
-				{
-			continue;
-		}
-		int found_neighs = match_search.nearestKSearch(map_descriptors->at(i),
-				1, neigh_indices, neigh_sqr_dists);
-		if (found_neighs == 1 && neigh_sqr_dists[0] < 0.25f) //  add match only if the squared descriptor distance is less than 0.25 (SHOT descriptor distances are between 0 and 1 by design)
-				{
-			pcl::Correspondence corr(neigh_indices[0], static_cast<int>(i),
-					neigh_sqr_dists[0]);
-			model_scene_corrs->push_back(corr);
-		}
-	}
-	std::cout << "Correspondences found: " << model_scene_corrs->size()
-			<< std::endl;
-
-	return 0.0;
-}
+//double computeWeight(PointCloudRGB measurement, PointCloudRGB map) {
+//	pcl::PointCloud<PointRGBT>::Ptr model(
+//			new pcl::PointCloud<PointRGBT>(measurement));
+//	pcl::PointCloud<PointRGBT>::Ptr model_keypoints(
+//			new pcl::PointCloud<PointRGBT>(measurement));
+//	pcl::PointCloud<PointRGBT>::Ptr mapCloud(
+//			new pcl::PointCloud<PointRGBT>(map));
+//	pcl::PointCloud<PointRGBT>::Ptr map_keypoints(
+//			new pcl::PointCloud<PointRGBT>(map));
+//	pcl::PointCloud<pcl::Normal>::Ptr model_normals(
+//			new pcl::PointCloud<pcl::Normal>());
+//	pcl::PointCloud<pcl::Normal>::Ptr map_normals(
+//			new pcl::PointCloud<pcl::Normal>());
+//	pcl::PointCloud<pcl::SHOT1344>::Ptr model_descriptors(
+//			new pcl::PointCloud<pcl::SHOT1344>());
+//	pcl::PointCloud<pcl::SHOT1344>::Ptr map_descriptors(
+//			new pcl::PointCloud<pcl::SHOT1344>());
+//
+//	//
+//	//  Compute Normals
+//	//
+//	pcl::NormalEstimationOMP<PointRGBT, pcl::Normal> norm_est;
+//	norm_est.setRadiusSearch(0.5);
+//	norm_est.setInputCloud(model);
+//	norm_est.compute(*model_normals);
+//
+//	norm_est.setInputCloud(mapCloud);
+//	norm_est.compute(*map_normals);
+//
+//	// SHOT1344
+//	// Compute Descriptor for keypoints
+//	//
+//	pcl::SHOTColorEstimationOMP<PointRGBT, pcl::Normal, pcl::SHOT1344> descr_est;
+//	descr_est.setRadiusSearch(0.02);
+//
+//	descr_est.setInputCloud(model_keypoints);
+//	descr_est.setInputNormals(model_normals);
+//	descr_est.setSearchSurface(model);
+//	descr_est.compute(*model_descriptors);
+//
+//	descr_est.setInputCloud(map_keypoints);
+//	descr_est.setInputNormals(map_normals);
+//	descr_est.setSearchSurface(mapCloud);
+//	descr_est.compute(*map_descriptors);
+//
+//	//
+//	//  Find Model-Scene Correspondences with KdTree
+//	//
+//	pcl::CorrespondencesPtr model_scene_corrs(new pcl::Correspondences());
+//
+//	pcl::KdTreeFLANN<pcl::SHOT1344> match_search;
+//	match_search.setInputCloud(model_descriptors);
+//	// For each scene keypoint descriptor,
+//	// find nearest neighbor into the model keypoints descriptor cloud and
+//	// add it to the correspondences vector.
+//	for (size_t i = 0; i < map_descriptors->size(); ++i) {
+//		std::vector<int> neigh_indices(1);
+//		std::vector<float> neigh_sqr_dists(1);
+//		if (!pcl_isfinite(map_descriptors->at(i).descriptor[0])) //skipping NaNs
+//				{
+//			continue;
+//		}
+//		int found_neighs = match_search.nearestKSearch(map_descriptors->at(i),
+//				1, neigh_indices, neigh_sqr_dists);
+//		if (found_neighs == 1 && neigh_sqr_dists[0] < 0.25f) //  add match only if the squared descriptor distance is less than 0.25 (SHOT descriptor distances are between 0 and 1 by design)
+//				{
+//			pcl::Correspondence corr(neigh_indices[0], static_cast<int>(i),
+//					neigh_sqr_dists[0]);
+//			model_scene_corrs->push_back(corr);
+//		}
+//	}
+//	std::cout << "Correspondences found: " << model_scene_corrs->size()
+//			<< std::endl;
+//
+//	return 0.0;
+//}
 
 double RobotObservationModel::measure(const RobotState& state) const {
 	// transform current particle's pose to its sensor frame
@@ -155,7 +167,7 @@ double RobotObservationModel::measure(const RobotState& state) const {
 
 		// TODO Set as field Parameter
 		double minRange = 0.5;
-		double maxRange = 8;
+		double maxRange = 6;
 
 		octomap::ColorOcTreeNode *colorNode;
 		if (m_Map->castRay(originP, direction, end, true, 1.5 * maxRange)) {
@@ -185,7 +197,7 @@ double RobotObservationModel::measure(const RobotState& state) const {
 			p += m_ZRand * 1.0 / maxRange;
 
 		double colorSimilarity;
-		if(m_RGB && !colorNode){
+		if(m_RGB && colorNode){
 			color::rgb<uint8_t> obsColor({pcIter->r,pcIter->g,pcIter->b});
 			color::rgb<uint8_t> raycastColor({colorNode->getColor().r,
 											  colorNode->getColor().g,
@@ -213,10 +225,79 @@ double RobotObservationModel::measure(const RobotState& state) const {
 		}
 
 	}
-	return weight;
+//	return weight;
+
+//		PointRGBT minPt,maxPt;
+//		pcl::getMinMax3D(pcTransformed,minPt,maxPt);
 //
-//		PointCloudRGB octoMapPointCloud;
+//		octomap::point3d min(minPt.x,minPt.y,minPt.z);
+//		octomap::point3d max(maxPt.x,maxPt.y,maxPt.z);
+//
+//		PointCloudRGB::Ptr octoMapPointCloud = (new PointCloudRGB)->makeShared();
+//		sensor_msgs::PointCloud2 octoMapPointCloud2;
 //		// Create PointCloud from Octomap hit Points
+//
+//		octomap::ColorOcTree::leaf_bbx_iterator it = m_Map->begin_leafs_bbx(min,max);
+//		octomap::ColorOcTree::leaf_bbx_iterator end = m_Map->end_leafs_bbx();
+//
+//		for( ; it!=end; it++ ){
+//			PointRGBT tmp;
+//			tmp.x = it.getX();
+//			tmp.y = it.getY();
+//			tmp.z = it.getZ();
+//			tmp.r = it->getColor().r;
+//			tmp.g = it->getColor().g;
+//			tmp.b = it->getColor().b;
+//			octoMapPointCloud->push_back(tmp);
+//		}
+//
+//		std::string name = "sensor" + std::to_string(rand()) + ".pcd";
+//		pcl::io::savePCDFileASCII (name, *octoMapPointCloud);
+//		std::cerr << "Saved " << octoMapPointCloud->points.size () << " data points sensor" << std::endl;
+////
+//		ROS_INFO("%d", octoMapPointCloud->size());
+//		pcl::visualization::CloudViewer viewer("simple");
+//		viewer.showCloud(octoMapPointCloud);
+//		while (!viewer.wasStopped ())
+//		{  }
+//
+//		sensor_msgs::Image image;
+//		try{
+//			pcl::toROSMsg(*octoMapPointCloud, image); //convert the cloud
+//		}
+//		catch (std::runtime_error &e) {
+//			ROS_ERROR_STREAM("Error in converting cloud to image message: "<< e.what());
+//		}
+//		image_pub_.publish (image);
+		return weight;
+
+		////		octoMapPointCloud->sensor_origin_ = pcTransformed->sensor_origin_;
+////		octoMapPointCloud->sensor_orientation_ = pcTransformed->sensor_orientation_;
+//		pcl::visualization::CloudViewer viewer("simple");
+//		viewer.showCloud(octoMapPointCloud);
+//		while (!viewer.wasStopped ())
+//		{  }
+//
+//
+//		boost::shared_ptr<pcl::Keypoint<pcl::PointXYZRGB, pcl::PointXYZI> > keypoint_detector;
+//		pcl::SIFTKeypoint<pcl::PointXYZRGB, pcl::PointXYZI>* sift3D = new pcl::SIFTKeypoint<pcl::PointXYZRGB, pcl::PointXYZI>;
+//		sift3D->setScales (0.01f, 3, 2);
+//		sift3D->setMinimumContrast (0.0);
+//		keypoint_detector.reset (sift3D);
+//
+//		boost::shared_ptr<pcl::PCLSurfaceBase<pcl::PointXYZRGBNormal> > surface_reconstruction;
+//		pcl::MarchingCubes<pcl::PointXYZRGBNormal>* mc = new pcl::MarchingCubesHoppe<pcl::PointXYZRGBNormal>;
+//		mc->setIsoLevel (0.001f);
+//		mc->setGridResolution (50, 50, 50);
+//		surface_reconstruction.reset(mc);
+//
+//		pcl::Feature<pcl::PointXYZRGB, pcl::PFHRGBSignature250>::Ptr feature_extractor (new pcl::PFHRGBEstimation<pcl::PointXYZRGB, pcl::Normal, pcl::PFHRGBSignature250>);
+//		feature_extractor->setKSearch(50);
+//		FeatureMatching<pcl::PFHRGBSignature250> tutorial(keypoint_detector, feature_extractor, surface_reconstruction, pcTransformed, octoMapPointCloud);
+//		//tutorial.run();
+//
+//		return tutorial.getCorrespondencesSize();
+
 //		for (; pcIter != pcTransformed.end(); pcIter++) {
 //			double p = 0.0;
 //			octomap::point3d direction(pcIter->x, pcIter->y, pcIter->z);

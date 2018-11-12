@@ -142,6 +142,14 @@ const Particle<StateType>* ParticleFilter<StateType>::getParticle(unsigned int p
   return m_CurrentList[particleNo];
 }
 
+// **** UnConst Version  ****///
+template <class StateType>
+Particle<StateType>* ParticleFilter<StateType>::getParticle(unsigned int particleNo) {
+  assert(particleNo < m_NumParticles);
+  return m_CurrentList[particleNo];
+}
+// **** UnConst Version  ****///
+
 template <class StateType>
 const StateType& ParticleFilter<StateType>::getState(unsigned int particleNo) const {
     assert(particleNo < m_NumParticles);

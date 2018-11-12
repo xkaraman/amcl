@@ -8,18 +8,24 @@
 #ifndef SRC_AMCLDEPTH_H_
 #define SRC_AMCLDEPTH_H_
 
+#include <amcl_depth_types.h>
+
 #include <geometry_msgs/PoseArray.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <std_srvs/Empty.h>
+
 #include <libPF/ParticleFilter.h>
+
 #include <message_filters/subscriber.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/sync_policies/approximate_time.h>
+
 #include <ros/node_handle.h>
 #include <ros/publisher.h>
 #include <ros/time.h>
 #include <ros/timer.h>
+
 #include <RobotState.h>
 #include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -42,11 +48,6 @@ class TransformBroadcaster;
 
 class MapModel;
 
-typedef pcl::PointXYZ PointT;
-typedef pcl::PointXYZRGB PointRGBT;
-typedef pcl::PointCloud< PointT > PointCloud;
-typedef pcl::PointCloud< PointRGBT > PointCloudRGB;
-
 class AMCLDepth {
 public:
 	AMCLDepth();
@@ -67,6 +68,8 @@ public:
 
 	void rgbCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
 
+	void laserRGBCallback(const sensor_msgs::LaserScanConstPtr &laser,const sensor_msgs::PointCloud2ConstPtr &rgb);
+
 	void prepareLaserPointCloud(const sensor_msgs::LaserScanConstPtr &laser,PointCloud &pc,std::vector<float> &ranges) const;
 
 	void prepareDepthPointCloud(const sensor_msgs::PointCloud2ConstPtr &msg, PointCloud &pc, std::vector<float> &ranges) const;
@@ -81,13 +84,16 @@ public:
 
 private:
 
+	typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::LaserScan,sensor_msgs::PointCloud2> MySyncPolicy;
+	message_filters::Synchronizer<MySyncPolicy> *sync;
+
 	std::shared_ptr<MapModel> m_MapModel;
 //	std::shared_ptr< libPF::MovementModel<RobotState> > m_MovementModel;
-//	std::shared_ptr< libPF::ObservationModel<RobotState> > m_ObservationModel;
+	std::shared_ptr< libPF::ObservationModel<RobotState> > m_ObservationModel;
 
 //	OccupancyMap *m_MapModel;
 	RobotMovementModel *m_MotionModel;
-	RobotObservationModel *m_ObservationModel;
+//	RobotObservationModel *m_ObservationModel;
 
 	// FrameIDs
 	std::string m_MapFrameID;
@@ -133,6 +139,9 @@ private:
 	bool m_UseLaser;
 	bool m_UseDepth;
 	bool m_UseRGB;
+
+	int m_LaserCounter;
+	int m_RGBCounter;
 
 	bool m_ReceivedSensorData;
 	bool m_Initialized;
