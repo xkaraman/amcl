@@ -48,6 +48,9 @@ class ResamplingStrategy {
      */
     virtual void resample(const ParticleList& source, const ParticleList& destination) const = 0;
 
+    virtual void resample(const ParticleList& source, std::vector<int> &indices) const = 0;
+
+
   private:
 
 };

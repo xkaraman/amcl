@@ -17,7 +17,7 @@
 </node>
   
   <node pkg="rviz" type="rviz" name="rviz"
-		args="-d $(find amcl_depth)/robot.rviz"
+		args="-d $(find amcl_lib_pf)/robot.rviz"
 		/>
 
 </launch>

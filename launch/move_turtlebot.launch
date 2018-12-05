@@ -1,0 +1,5 @@
+<launch>
+    <include file="$(find turtlebot_navigation)/launch/includes/move_base.launch.xml"/> 
+	<rosparam file="$(find amcl_lib_pf)/launch/param/dwa_local_planner_params.yaml" command="load" />
+	<rosparam file="$(find amcl_lib_pf)/launch/param/navfn_global_planner_params.yaml" command="load" />
+</launch>

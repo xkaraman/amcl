@@ -40,6 +40,7 @@
 class OccupancyMap;
 class RobotMovementModel;
 class RobotObservationModel;
+class RGBObservationModel;
 
 namespace tf2_ros {
 class TransformListener;
@@ -93,6 +94,7 @@ private:
 
 //	OccupancyMap *m_MapModel;
 	RobotMovementModel *m_MotionModel;
+	RGBObservationModel *m_RGBObs;
 //	RobotObservationModel *m_ObservationModel;
 
 	// FrameIDs
@@ -113,6 +115,7 @@ private:
 	geometry_msgs::PoseArray m_PoseArray;
 	ros::Publisher m_PoseArrayPub;
 	ros::Publisher m_DepthFilteredPub;
+	ros::Publisher m_BestPosePub;
 
 	ros::Timer m_LatestTransformTimer;
 
@@ -140,13 +143,22 @@ private:
 	bool m_UseDepth;
 	bool m_UseRGB;
 
-	int m_LaserCounter;
-	int m_RGBCounter;
-
 	bool m_ReceivedSensorData;
 	bool m_Initialized;
 	bool m_FirstRun;
 	geometry_msgs::Pose m_LastLocalizedPose;
+
+	double m_SensorSampleDist;
+	double m_ObservationThresholdTrans;
+	double m_ObservationThresholdRot;
+	double m_FilterMinRange;
+	double m_FilterMaxRange;
+	double m_TransformTolerance;
+	int m_ParticlesWithRgb;
+	double m_InitXStdDev;
+	double m_InitYStdDev;
+	double m_InitYawStdDev;
+	double m_DownsampleVoxelSize;
 };
 
 

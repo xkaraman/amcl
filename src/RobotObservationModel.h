@@ -111,6 +111,8 @@ class RobotObservationModel : public libPF::ObservationModel<RobotState> {
     double m_LambdaShort;
 
     ros::Publisher image_pub_; //image message publisher
+	double m_minRange;
+	double m_maxRange;
 };
 
 #endif

@@ -40,6 +40,8 @@ RobotObservationModel::RobotObservationModel(ros::NodeHandle *nh,
 				m_RGB(false){
 	m_Map = mapModel->getMap();
 	m_BaseToSensorTransform.setIdentity();
+	nh->param("depth_min_range",m_minRange, 1.0);
+	nh->param("depth_max_range",m_maxRange, 6.0);
 
 	image_pub_ = nh->advertise<sensor_msgs::Image> ("pclToImage", 30);
 
@@ -165,12 +167,8 @@ double RobotObservationModel::measure(const RobotState& state) const {
 
 		octomap::point3d end;
 
-		// TODO Set as field Parameter
-		double minRange = 0.5;
-		double maxRange = 6;
-
 		octomap::ColorOcTreeNode *colorNode;
-		if (m_Map->castRay(originP, direction, end, true, 1.5 * maxRange)) {
+		if (m_Map->castRay(originP, direction, end, true, 1.5 * m_maxRange)) {
 			ROS_ASSERT(m_Map->isNodeOccupied(m_Map->search(end)));
 			colorNode = m_Map->search(end);
 			raycastRange = (originP - end).norm();
@@ -183,18 +181,18 @@ double RobotObservationModel::measure(const RobotState& state) const {
 		float z = obsRange - raycastRange;
 
 		// todo check normalization factors in Probabilistics Robotics page 138
-		if (obsRange < maxRange)
+		if (obsRange < m_maxRange)
 			p += m_ZHit * 1 / (std::sqrt(2 * M_PI * m_SigmaHit * m_SigmaHit))
 							* exp(-(z * z) / (2 * m_SigmaHit * m_SigmaHit));
 
 		if (z < 0)
 			p += m_ZShort * m_LambdaShort * exp(-m_LambdaShort * obsRange);
 
-		if (obsRange >= maxRange)
+		if (obsRange >= m_maxRange)
 			p += m_ZMax * 1.0;
 
-		if (obsRange < maxRange)
-			p += m_ZRand * 1.0 / maxRange;
+		if (obsRange < m_maxRange)
+			p += m_ZRand * 1.0 / m_maxRange;
 
 		double colorSimilarity;
 		if(m_RGB && colorNode){

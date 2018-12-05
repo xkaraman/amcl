@@ -39,13 +39,16 @@ std::string stripSlash(const std::string &in)
 RobotMovementModel::RobotMovementModel(ros::NodeHandle *nh,
 		tf2_ros::Buffer *tfBuffer, const std::string &odomFrameID,
 		const std::string &baseFrameID) :
-		libPF::MovementModel<RobotState>(), m_XStdDev(0.01), m_YStdDev(0.01), m_ThetaStdDev(
-				0.1), m_SpeedStdDev(400.0), m_RotSpeedStdDev(
-				1000.0 / 180.0 * M_PI), m_TFBuffer(tfBuffer), m_TFListener(
-				new tf2_ros::TransformListener(*m_TFBuffer)), m_OdomFrameID(
-				odomFrameID), m_BaseFrameID(baseFrameID), m_FirstOdometryReceived(
-				false) {
+		libPF::MovementModel<RobotState>(),
+		m_TFBuffer(tfBuffer),
+		m_TFListener(new tf2_ros::TransformListener(*m_TFBuffer)),
+		m_OdomFrameID(odomFrameID), m_BaseFrameID(baseFrameID),
+		m_FirstOdometryReceived(false)
+	{
 	m_RNG = new libPF::CRandomNumberGenerator();
+	nh->param("motion/xStdDev",m_XStdDev,0.05);
+	nh->param("motion/yStdDev",m_YStdDev,0.05);
+	nh->param("motion/yawStdDev",m_ThetaStdDev,0.1);
 	ROS_INFO("Robot Motion Model Created!");
 }
 
@@ -60,7 +63,7 @@ void RobotMovementModel::drift(RobotState& state, double dt) const {
 
 	geometry_msgs::TransformStamped odomTransform;
 	if (!lookupOdomTransform(m_LastOdomPose.header.stamp + ros::Duration(dt), odomTransform)) {
-		ROS_WARN("EXIT MOVEMENT MODEL");
+		ROS_WARN("MovementModel::Drift(): Transform not found");
 		return;
 	}
 
@@ -71,11 +74,9 @@ void RobotMovementModel::drift(RobotState& state, double dt) const {
 }
 
 void RobotMovementModel::diffuse(RobotState& state, double dt) const {
-    state.setXPos(state.getXPos() + m_RNG->getGaussian(m_XStdDev) );
-    state.setYPos(state.getYPos() + m_RNG->getGaussian(m_YStdDev) );
-//    state.setSpeed(state.getSpeed() + m_RNG->getGaussian(m_SpeedStdDev) * dt);
-    state.setTheta(state.getTheta() + m_RNG->getGaussian(m_ThetaStdDev));
-//    state.setRotationSpeed(state.getRotationSpeed() + m_RNG->getGaussian(m_RotSpeedStdDev) * dt);
+    state.setXPos(state.getXPos() + m_RNG->getGaussian(m_XStdDev) * dt );
+    state.setYPos(state.getYPos() + m_RNG->getGaussian(m_YStdDev) * dt );
+    state.setTheta(state.getTheta() + m_RNG->getGaussian(m_ThetaStdDev) * dt  );
 }
 
 void RobotMovementModel::setXStdDev(double d) {

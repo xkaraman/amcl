@@ -36,6 +36,7 @@ void FeatureMatching<FeatureType>::match() {
 
 	  if(source_keypoints_->points.size() == 0 || target_keypoints_->points.size() == 0  ){
 		  correspondences_->resize(0);
+		  fitness_score_ = 1e8;
 		  return;
 	  }
 

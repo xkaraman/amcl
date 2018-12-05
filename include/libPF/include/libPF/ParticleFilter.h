@@ -325,6 +325,10 @@ class ParticleFilter {
      */
     void resample();
 
+    // Modified to return just indices to resampled particles
+    void resample(std::vector<int> &indices);
+
+
     /**
      * This method drifts the particles (second step of a filter process) using
      * the movement model of the particle filter. dt defines the time interval

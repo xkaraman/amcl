@@ -44,7 +44,7 @@ add_definitions(${PCL_DEFINITIONS})
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
 
-SET(LIBRARIES MapModel MotionModel LaserObsModel ObservationModel RGBObsModel RobotState RobotStateDistribution)
+SET(LIBRARIES MapModel MotionModel LaserObsModel ObservationModel RGBObsModel RobotState RobotStateDistribution RandomGenerator)
 
 catkin_package(
 #  INCLUDE_DIRS include
@@ -84,6 +84,7 @@ add_library(RGBObsModel src/RGBObservationModel.cpp)
 
 add_library(RobotState src/RobotState.cpp)
 add_library(RobotStateDistribution src/RobotStateDistribution.cpp)
+add_library(RandomGenerator src/CPPRandomNumberGenerator.cpp)
 #target_link_libraries(RobotStateDistribution PF)
 
 add_library(AMCLDepth src/AMCLDepth.cpp)

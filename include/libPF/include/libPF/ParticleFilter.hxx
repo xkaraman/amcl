@@ -195,7 +195,13 @@ void ParticleFilter<StateType>::resample() {
   m_ResamplingStrategy->resample(m_LastList, m_CurrentList);
 }
 
-
+template <class StateType>
+void ParticleFilter<StateType>::resample(std::vector<int> &indices) {
+  // swap lists
+//  m_CurrentList.swap(m_LastList);
+  // call resampling strategy
+  m_ResamplingStrategy->resample(m_CurrentList, indices);
+}
 template <class StateType>
 void ParticleFilter<StateType>::drift(double dt) {
 #pragma	omp parallel for
@@ -220,7 +226,7 @@ void ParticleFilter<StateType>::measure() {
     double weight = m_ObservationModel->measure(m_CurrentList[i]->getState());
     m_CurrentList[i]->setWeight(weight);
     // CHANGED FROM THE OROGINAL
-    // UNCOMMENT THE ABOVE and COMMENT BELOW FOR ORIGINAL
+//     UNCOMMENT THE ABOVE and COMMENT BELOW FOR ORIGINAL
 //    weight = m_CurrentList[i]->getWeight() * weight;
 //    m_CurrentList[i]->setWeight(weight);
   }

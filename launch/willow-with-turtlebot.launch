@@ -1,6 +1,8 @@
 <launch>
-  <arg name="world_file"  default="$(env TURTLEBOT_GAZEBO_WORLD_FILE)"/>
-
+  <!-- arg name="world_file"  default="$(env TURTLEBOT_GAZEBO_WORLD_FILE)"/-->
+	<arg name="map" default="corridor"/>
+  <arg name="world_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).world"/>
+  
   <arg name="base"      value="$(optenv TURTLEBOT_BASE kobuki)"/> <!-- create, roomba -->
   <arg name="battery"   value="$(optenv TURTLEBOT_BATTERY /proc/acpi/battery/BAT0)"/>  <!-- /proc/acpi/battery/BAT0 --> 
   <arg name="gui" default="true"/>

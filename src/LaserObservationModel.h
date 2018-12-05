@@ -75,6 +75,8 @@ private:
 	double m_ZMax;
 	double m_SigmaHit;
 	double m_LambdaShort;
+	double m_minRange;
+	double m_maxRange;
 };
 
 #endif /* SRC_LASEROBSERVATIONMODEL_H_ */

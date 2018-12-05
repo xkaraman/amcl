@@ -144,9 +144,6 @@ private:
 	double m_XStdDev;
 	double m_YStdDev;
 	double m_ThetaStdDev;
-	double m_SpeedStdDev;
-	double m_RotSpeedStdDev;
-
 };
 
 #endif

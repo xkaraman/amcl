@@ -1,10 +1,45 @@
 <launch>
-  	<arg name="laser"	default="true"/>
-  	<arg name="depth"	default="false"/>
-  	<arg name="rgb"		default="false"/>
+    <arg name="laser"	default="true"/>
+    <arg name="depth"	default="false"/>
+    <arg name="rgb"		default="false"/>
+    <arg name="particles" default="300"/>
 
-	<node name="amcl_node" pkg="amcl_lib_pf" type="amcl_lib_pf_node" output="screen"/>
-	  <param name="use_laser"	type="bool" value="$(arg laser)"/>
-	  <param name="use_depth"	type="bool" value="$(arg depth)"/>
-	  <param name="use_rgb"		type="bool"	value="$(arg rgb)"/>
+    <node name="amcl_node" pkg="amcl_lib_pf" type="amcl_lib_pf_node" output="screen"/>
+    <param name="num_particles" type = "int" value="$(arg particles)"/>
+    # Number of Particles to improve with Depth/RGB data sensor
+    # More the better but costly
+    <param name="num_particles_rgb" type = "int" value="50"/> <!-- 45 for expirements-->
+
+    <param name="use_laser"	type="bool" value="$(arg laser)"/>
+    <param name="use_depth"	type="bool" value="$(arg depth)"/>
+    <param name="use_rgb"		type="bool"	value="$(arg rgb)"/>
+
+    <param name="threshold_translation" type = "double" value="0.2"/>
+    <param name="threshold_rotation" type = "double" value="0.3"/>
+
+    
+    <param name="laser_min_range" type = "double" value="1"/>
+    <param name="laser_max_range" type = "double" value="8"/>
+
+    # Motion Model Parameters
+    <param name="motion/xStdDev" type = "double" value=".08"/>
+    <param name="motion/yStdDev" type = "double" value=".08"/>
+    <param name="motion/yawStdDev" type = "double" value=".22"/>
+    
+    # Observation Model Parameters
+    <!--param name="obs/maximum_icp_iterations" type = "int" value="50"/-->
+    <!--param name="obs/transformation_epsilon" type = "double" value=".0001"/-->
+    <!-- Keypoints: 1 = Sift3D, 2 = Harris3D, 3 = Tomasi3D, 4 = Noble3D,5 = Lowe3D, 6 = Curvature3D -->
+    <param name="obs/keypoint_type" type = "int" value="2"/>
+    <!-- Descriptors:  1 = FPFH, 2 = SHOTRGB, 3 = PFH, 4 = PFHRGB -->
+    <param name="obs/descriptor_type" type = "int" value="4"/>
+    <param name="sensor_sample_distance" type = "double" value="0.2"/>
+    <param name="downsample_voxel_size" type = "double" value="0.62"/>
+    
+    # Initial Position Standard Deviations from Given Point
+    <param name="init/xStdDev" type = "double" value="0.2"/>
+    <param name="init/yStdDev" type = "double" value="0.2"/>
+    <param name="init/yawStdDev" type = "double" value="0.17"/>
+
+    <param name="transform_tolerance" type = "double" value="1.0"/>
 </launch>

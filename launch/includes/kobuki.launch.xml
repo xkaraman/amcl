@@ -3,8 +3,8 @@
   <arg name="stacks"/>
   <arg name="3d_sensor"/>
   
-  <arg name="x" default="0"/> <!-- -2 octomap -->
-  <arg name="y" default="0"/>	<!-- 2 octomap -->
+  <arg name="x" default="0"/> <!-- -2 octomap willowgarage -->
+  <arg name="y" default="0"/>	<!-- 2 octomap willowgarage-->
   <arg name="z" default="0"/>
   <arg name="roll" default="0"/>
   <arg name="pitch" default="0"/>

@@ -15,14 +15,12 @@
 #include <RobotState.h>
 #include <tf2/LinearMath/Transform.h>
 #include <memory>
+#include <ros/ros.h>
 
 class MapModel;
 namespace octomap {
 class ColorOcTree;
 } /* namespace octomap */
-namespace ros {
-class NodeHandle;
-} /* namespace ros */
 
 
 class RGBObservationModel: public libPF::ObservationModel<RobotState> {
@@ -74,6 +72,13 @@ private:
 
 	bool m_RGB;
 	std::shared_ptr<octomap::ColorOcTree> m_Map;
+
+	// User Defined Parameters for Observation Model
+	double m_DownsampleVoxelSize;
+	int m_MaximumIterations;
+	double m_TransformationEpsilon;
+	int m_KeypointType;
+	int m_DescriptorType;
 };
 
 #endif /* SRC_RGBOBSERVATIONMODEL_H_ */

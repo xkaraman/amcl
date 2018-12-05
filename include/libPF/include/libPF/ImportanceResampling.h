@@ -2,6 +2,7 @@
 #define IMPORTANCERESAMPLING_H
 
 #include "libPF/CRandomNumberGenerator.h"
+#include "CompareParticleWeights.h"
 
 namespace libPF
 {
@@ -26,7 +27,7 @@ class ImportanceResampling : public ResamplingStrategy<StateType>{
      * A ParticleList is an array of pointers to Particles.
      */
     typedef std::vector< Particle<StateType>* > ParticleList;
-    
+
   public:
     /** 
      * The constructor of this base class inits some members.
@@ -46,6 +47,9 @@ class ImportanceResampling : public ResamplingStrategy<StateType>{
      * @param destination the destination list where to put the copies.
      */
     void resample(const ParticleList& source, const ParticleList& destination) const;
+
+    void resample(const ParticleList& source, std::vector<int> &indices) const;
+
 
     /**
      * Sets the Random Number Generator to use in resample() to generate uniformly distributed random numbers.
@@ -96,6 +100,43 @@ void ImportanceResampling<StateType>::resample(const ParticleList& sourceList, c
   }
 }
 
+template<class StateType>
+void ImportanceResampling<StateType>::resample(
+		ParticleList const & source, std::vector<int> &indices) const {
+	int size = indices.size();
+	indices.resize(size);
+
+	int index = m_RNG->getUniform(0,size);
+	double b = 0;
+	auto max_element = std::min_element(source.begin(),source.end(),CompareParticleWeights<StateType>());
+	double wmax = (*max_element)->getWeight();
+//	double wmax = 2;
+	for(int destIndex = 0; destIndex < size; destIndex++){
+		b = b + m_RNG->getUniform(0,wmax);
+		while( (source[index])->getWeight() < b){
+			b = b - (source[index])->getWeight();
+			index = (index + 1) % size;
+		}
+		indices.at(destIndex) = index;
+	}
+//	double inverseNum = 1.0f / source.size();
+//	double start = m_RNG->getUniform() * inverseNum;  // random start in CDF
+//	double cumulativeWeight = 0.0f;
+//	unsigned int sourceIndex = 0;                     // index to draw from
+//	cumulativeWeight += source[sourceIndex]->getWeight();
+//	for (unsigned int destIndex = 0; destIndex < indices.size(); destIndex++) {
+//	    double probSum = start + inverseNum * destIndex;     // amount of cumulative weight to reach
+//	    while (probSum > cumulativeWeight) {                 // sum weights until
+//	      sourceIndex++;
+//	      if (sourceIndex >= source.size()) {
+//	        sourceIndex = source.size() - 1;
+//	        break;
+//	      }
+//	      cumulativeWeight += source[sourceIndex]->getWeight(); // target sum reached
+//	    }
+//	    indices.at(destIndex) = sourceIndex;  // copy particle (via assignment operator)
+//	  }
+}
 
 template <class StateType>
 void ImportanceResampling<StateType>::setRNG(RandomNumberGenerationStrategy* rng)
