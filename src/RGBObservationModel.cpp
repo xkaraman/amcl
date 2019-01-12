@@ -5,6 +5,7 @@
  *      Author: xenakis
  */
 
+#include <FeatureMatching1.h>
 #include <RGBObservationModel.h>
 #include <MapModel.h>
 
@@ -15,42 +16,32 @@
 #include <pcl/common/common.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/filter.h>
+#include <pcl/filters/passthrough.h>
 #include <pcl/registration/icp.h>
-
 #include <pcl/registration/gicp6d.h>
+#include <pcl/keypoints/iss_3d.h>
+
+#include <pcl/tracking/coherence.h>
+#include <pcl/tracking/approx_nearest_pair_point_cloud_coherence.h>
+#include <pcl/tracking/distance_coherence.h>
+#include <pcl/tracking/hsv_color_coherence.h>
 
 // Feature Matching
-#include <FeatureMatching.h>
-//#include <pcl/keypoints/sift_keypoint.h>
-//#include <pcl/surface/marching_cubes.h>
-
-
-//#include <geometry_msgs/Transform.h>
-//#include <MapModel.h>
-//#include <octomap/ColorOcTree.h>
-//#include <pcl/common/common.h>
-//#include <RGBObservationModel.h>
-//#include <tf2/convert.h>
-//#include <tf2_eigen/tf2_eigen.h>
-//#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-//#include <pcl/keypoints/narf_keypoint.h>
-//#include <pcl/registration/icp.h>
-//#include <pcl/registration/gicp6d.h>
-//#include <pcl/registration/gicp.h>
-//#include <tf2/LinearMath/Transform.h>
-
 #include <pcl/visualization/pcl_visualizer.h>
 
 RGBObservationModel::RGBObservationModel(ros::NodeHandle* nh,
-		std::shared_ptr<MapModel> mapModel) {
+		std::shared_ptr<MapModel> mapModel)
+:m_ObservedMeasurementRGB(new PointCloudRGB){
 	m_Map = mapModel->getMap();
 	m_BaseToSensorTransform.setIdentity();
 	m_RGB = false;
+	m_NodeHandle = nh;
 	nh->param("obs/keypoint_type",m_KeypointType,1);
 	nh->param("obs/descriptor_type",m_DescriptorType,1);
-	nh->param("downsample_voxel_size",m_DownsampleVoxelSize,0.2);
+	nh->param("downsample_voxel_size",m_DownsampleVoxelSize,0.3f);
 	nh->param("obs/maximum_icp_iterations",m_MaximumIterations,50);
-	nh->param("obs/transformation_epsilon",m_TransformationEpsilon,1e-4);
+	nh->param("obs/transformation_epsilon",m_TransformationEpsilon,1e-8);
+	nh->param("obs/octomap_leaf_depth",m_OctomapDepth,16);
 }
 
 RGBObservationModel::~RGBObservationModel() {
@@ -63,85 +54,117 @@ double RGBObservationModel::measure(RobotState const & state) const {
 	tf2::Transform particlePose;
 	tf2::convert(state.getPose(), particlePose);
 
-	octomap::point3d pose(particlePose.getOrigin().x(),particlePose.getOrigin().getY(),0.0);
-
-	// If Pose is at Unknown space return
-//	if(!m_Map->search(pose))
-//		return 0.000001;
+	octomap::point3d pose(particlePose.getOrigin().getX(),particlePose.getOrigin().getY(),particlePose.getOrigin().getZ());
 
 	tf2::Transform globalLaserOriginTf = particlePose * m_BaseToSensorTransform;
 	geometry_msgs::Transform transformMsg;
 	transformMsg = tf2::toMsg(globalLaserOriginTf);
 	Eigen::Affine3d tmp = tf2::transformToEigen(transformMsg);
 
-	PointCloudRGB::Ptr pcTransformed = (new PointCloudRGB)->makeShared();
-	pcl::transformPointCloud(m_ObservedMeasurementRGB, *pcTransformed, tmp);
+//	std::cout << "Transformation Matrix: " << transformMsg << std::endl;
+//	std::cout << "Original Measurement: " << m_ObservedMeasurementRGB << std::endl;
+
+	PointRGBT minoriginal,maxoriginal;
+	pcl::getMinMax3D<PointRGBT>(*m_ObservedMeasurementRGB,minoriginal,maxoriginal);
+
+//	std::cout<<"Min Point at: " << minoriginal << std::endl;
+//	std::cout<<"Max Point at: " << maxoriginal << std::endl;
+
+	PointCloudRGB::Ptr pcTransformed(new PointCloudRGB());
+//	PointCloudRGB::Ptr pcOriginal(new PointCloudRGB(m_ObservedMeasurementRGB));
+//	PointCloudRGB pcDownsampled;
+//	pcl::VoxelGrid<PointRGBT> vg;
+//	vg.setInputCloud(pcOriginal);
+//	vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
+//	vg.setDownsampleAllData(false);
+//	vg.filter(pcDownsampled);
+	pcl::transformPointCloud(*m_ObservedMeasurementRGB, *pcTransformed, tmp);
 
 	PointRGBT minTransformed,maxTransformed;
-
+	pcl::getMinMax3D<PointRGBT>(*pcTransformed,minTransformed,maxTransformed);
 //	minTransformed = pcl::transformPoint(m_min3D,tmp);
 //	maxTransformed = pcl::transformPoint(m_max3D,tmp);
-//
-////	double x,y,z;
-////	m_Map->getMetricMin(x,y,z);
-////	if(minTransformed.x < x) minTransformed.x = x;
-////	if(minTransformed.y < y) minTransformed.y = y;
-////	if(minTransformed.z < z) minTransformed.z = z;
-////	m_Map->getMetricMax(x,y,z);
-////	if(maxTransformed.x > x) maxTransformed.x = x;
-////	if(maxTransformed.y > y) maxTransformed.y = y;
-////	if(maxTransformed.z > z) maxTransformed.z = z;
 
-	pcl::getMinMax3D<PointRGBT>(*pcTransformed,minTransformed,maxTransformed);
+//	std::cout<<"Min Point Transformed at: " << minTransformed << std::endl;
+//	std::cout<<"Max Point Transformed at: " << maxTransformed << std::endl;
+
+//	double x,y,z;
+//	m_Map->getMetricMin(x,y,z);
+//	octomap::point3d min(x,y,z);
+//	m_Map->getMetricMax(x,y,z);
+//	octomap::point3d max(x,y,z);
 
 	octomap::point3d min(minTransformed.x,minTransformed.y,minTransformed.z);
 	octomap::point3d max(maxTransformed.x,maxTransformed.y,maxTransformed.z);
+//
+//
+	octomap::OcTreeKey minKey;
+	octomap::OcTreeKey maxKey;
 
-	octomap::ColorOcTree::leaf_bbx_iterator it = m_Map->begin_leafs_bbx(min,max);
-	octomap::ColorOcTree::leaf_bbx_iterator end = m_Map->end_leafs_bbx();
-
-	PointCloudRGB::Ptr octoMapPointCloud = (new PointCloudRGB)->makeShared();
-	octoMapPointCloud->is_dense = false;
-	pcTransformed->is_dense = false;
-
-	for( ; it!=end; ++it ){
-		PointRGBT tmp;
-		tmp.x = it.getX();
-		tmp.y = it.getY();
-		tmp.z = it.getZ();
-		tmp.r = it->getColor().r;
-		tmp.g = it->getColor().g;
-		tmp.b = it->getColor().b;
-		octoMapPointCloud->push_back(tmp);
+	bool inmap;
+	inmap = m_Map->coordToKeyChecked(min,minKey);
+	if(!inmap){
+		ROS_WARN("Out of Bounds min");
+	}
+	inmap = m_Map->coordToKeyChecked(max,maxKey);
+	if(!inmap){
+		ROS_WARN("Out of Bounds max");
 	}
 
-//	std::cerr << "pointcloud sensor " << pcTransformed->points.size() << " data points sensor" << std::endl;
-//	std::cerr << "pointcloud octomap " << octoMapPointCloud->points.size() << " data points octomap" << std::endl;
+	octomap::ColorOcTree::leaf_bbx_iterator it = m_Map->begin_leafs_bbx(minKey,maxKey,m_OctomapDepth);
+	octomap::ColorOcTree::leaf_bbx_iterator end = m_Map->end_leafs_bbx();
 
-//	// show results
-//	pcl::visualization::PCLVisualizer viewer("Viewer for original clouds");
-//
-//	viewer.addPointCloud(octoMapPointCloud, "octoMap");
-//	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 255, 0, 0, "octoMap"); // RED
-//
-//	viewer.addPointCloud(pcTransformed, "sensor");
-//	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 255, "sensor"); // BLUE
-//
-//	while (!viewer.wasStopped ())
-//	  {
-//		viewer.spinOnce (100);
-//		boost::this_thread::sleep (boost::posix_time::microld reseconds (100000));
-//	  }
+//	octomap::ColorOcTree::leaf_iterator it = m_Map->begin_leafs();
+//	octomap::ColorOcTree::leaf_iterator end = m_Map->end_leafs();
+
+	PointCloudRGB::Ptr octoMapPointCloud(new PointCloudRGB);
+//	octoMapPointCloud->is_dense = false;
+//	pcTransformed->is_dense = false;
+//	for( ; it!=end; ++it ){
+//		PointRGBT tmp;
+//		tmp.x = it.getX();
+//		tmp.y = it.getY();
+//		tmp.z = it.getZ();
+//		tmp.r = it->getColor().r;
+//		tmp.g = it->getColor().g;
+//		tmp.b = it->getColor().b;
+//		octoMapPointCloud->push_back(tmp);
+//	}
+
+//	std::cout << "DownSampled cloud: " << pcDownsampled << std::endl;
+//	std::cout << "Transformed cloud: " << *pcTransformed << std::endl;
+//	std::cout << "Octomap cloud    : " << *octoMapPointCloud << std::endl;
+
+//	Passthough
+	pcl::IndicesPtr indices_x(new std::vector<int>);
+	pcl::PassThrough<PointRGBT> pass;
+	pass.setInputCloud(m_ScenePointCloud);
+	pass.setFilterFieldName("x");
+	pass.setFilterLimits(minTransformed.x,maxTransformed.x);
+	pass.filter (*indices_x);
+	pass.setIndices(indices_x);
+	pass.setFilterFieldName("y");
+	pass.setFilterLimits(minTransformed.y,maxTransformed.y);
+	pass.filter (*indices_x);
+	pass.setIndices(indices_x);
+	pass.setFilterFieldName("z");
+	pass.setFilterLimits(minTransformed.z,maxTransformed.z);
+	pass.filter (*octoMapPointCloud);
 
 	// Down sample using leaf size of m
-	pcl::VoxelGrid<PointRGBT> sor;
-	sor.setInputCloud(octoMapPointCloud);
-	sor.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
-	sor.setDownsampleAllData(true);
-	sor.filter(*octoMapPointCloud);
+//	pcl::VoxelGrid<PointRGBT> vg;
+//	PointCloudRGB octomapDownsampled;
+//	vg.setInputCloud(octoMapPointCloud);
+//	vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
+//	vg.filter(*octoMapPointCloud);
+
+//	sor.setInputCloud(pcTransformed);
+//	sor.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
+//	sor.setDownsampleAllData(false);
+//	sor.filter(*pcTransformed);
 
 //	std::cerr << "pointcloud downsampled sensor " << pcTransformed->points.size() << " data points sensor" << std::endl;
-//	std::cerr << "pointcloud downsampled octomap " << octoMapPointCloud->points.size() << " data points octomap" << std::endl;
+//	std::cout << "Octomap DownSampled cloud    : " << *octoMapPointCloud << std::endl;
 
 	// make dense
 	std::vector<int> indices;
@@ -149,20 +172,163 @@ double RGBObservationModel::measure(RobotState const & state) const {
 	pcl::removeNaNFromPointCloud(*pcTransformed, *pcTransformed, indices);
 	pcl::removeNaNFromPointCloud(*octoMapPointCloud,  *octoMapPointCloud,  indices);
 
-	if (!octoMapPointCloud || octoMapPointCloud->points.size() <= 5 ||
-		!pcTransformed || pcTransformed->points.size() <= 5)
-		return 1;
+	if (!octoMapPointCloud || octoMapPointCloud->points.size() <= 20 ||
+		!pcTransformed || pcTransformed->points.size() <= 20){
+		ROS_INFO("Octomap/Sensor Cloud Not Enough for ICP");
+		return 0.8;
+	}
+
+
+	//----------- Show results -----------//
+//	octomap::ColorOcTree::leaf_iterator itleaf= m_Map->begin_leafs();
+//	octomap::ColorOcTree::leaf_iterator endleaf = m_Map->end_leafs();
+//	PointCloudRGB::Ptr octoMapFullPointCloud(new PointCloudRGB);
+//	for( ; itleaf!=endleaf; ++itleaf ){
+//			PointRGBT tmp;
+//			tmp.x = itleaf.getX();
+//			tmp.y = itleaf.getY();
+//			tmp.z = itleaf.getZ();
+//			tmp.r = itleaf->getColor().r;
+//			tmp.g = itleaf->getColor().g;
+//			tmp.b = itleaf->getColor().b;
+//			octoMapFullPointCloud->push_back(tmp);
+//	}
+//
+//	PointCloudRGB::Ptr minMaxPointCloud(new PointCloudRGB);
+//	minMaxPointCloud->push_back(minTransformed);
+//	minMaxPointCloud->push_back(maxTransformed);
+//
+//	pcl::visualization::PCLVisualizer viewer("Viewer for original clouds");
+//
+//	viewer.addCoordinateSystem(1.0);
+//	viewer.initCameraParameters();
+//
+////	viewer.addPointCloud(octoMapFullPointCloud, "octomap");
+////	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 255, 0, "octomap"); // Green
+//
+//	viewer.addPointCloud(octoMapPointCloud, "particle");
+//	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 255, 0, 0, "particle"); // RED
+//
+////	viewer.addPointCloud(minMaxPointCloud,"minmax");
+////	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE,3,"minmax");
+////	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 255, 175, 0, "minmax");
+//
+//	viewer.addPointCloud(pcTransformed, "sensor");
+//	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 255, "sensor"); // BLUE
+//
+//	while (!viewer.wasStopped ())
+//	  {
+//		viewer.spinOnce (100);
+//		boost::this_thread::sleep(boost::posix_time::microseconds (100000));
+//	  }
+
+	//==================================//
+
+	//----------------Distance-Color Coherence --------------------//
+//	using namespace pcl::tracking;
+//    ApproxNearestPairPointCloudCoherence<PointRGBT>::Ptr coherence = ApproxNearestPairPointCloudCoherence<PointRGBT>::Ptr
+//(new ApproxNearestPairPointCloudCoherence<PointRGBT> ());
+//
+//    boost::shared_ptr<DistanceCoherence<PointRGBT> > distanceCoherence
+//    = boost::shared_ptr<DistanceCoherence<PointRGBT> > (new DistanceCoherence<PointRGBT> ());
+//    coherence->addPointCoherence(distanceCoherence);
+//
+////	 boost::shared_ptr<HSVColorCoherence<PointRGBT> > colorCoherence
+////	= boost::shared_ptr<HSVColorCoherence<PointRGBT> > (new HSVColorCoherence<PointRGBT> ());
+////	colorCoherence->setWeight(0.5);
+////	coherence->addPointCoherence(colorCoherence);
+//
+//	boost::shared_ptr<pcl::search::Octree<PointRGBT> > search (new pcl::search::Octree<PointRGBT> (0.01));
+//
+//    coherence->setSearchMethod (search);
+//    coherence->setMaximumDistance (0.25);
+//
+//	coherence->setTargetCloud(octoMapPointCloud);
+//
+//	float weight2;
+//	pcl::IndicesPtr indice (new std::vector<int>);
+//	coherence->compute(pcTransformed,indice,weight2);
+//
+//	std:: cout << "Weight: " << weight2 << " " << exp(weight2) << std::endl;
+//
+//	return exp(weight2);
+
+	FeatureMatching1 feature1(m_NodeHandle,pcTransformed,octoMapPointCloud);
+	feature1.setRGB(m_RGB);
+	feature1.match();
+//	while(!feature1.visualizer_.wasStopped())
+//		feature1.run();
+//	return std::exp(-feature1.getCoherence());
+	return feature1.getCoherence();
+	//-------------------------------------------------------------//
+
+
+
+	//-------- ICP-PoinctCloud -------//
+	double fitnessScore;
+	Eigen::Matrix4f transformation;
+	bool converged;
+
+	FeatureMatching1 feature(m_NodeHandle, pcTransformed,octoMapPointCloud);
+	feature.setRGB(m_RGB);
+	feature.match();
+//	while(!feature.visualizer_.wasStopped())
+//		feature.run();
+	fitnessScore = feature.getFitnessScore();
+	transformation = feature.getFinalTransformation();
+	converged = feature.hasConverged();
+
+//	std:: cout << "Has Converged: " << converged << std::endl;
+
+	Eigen::Vector3f translation;
+	translation = transformation.block<3,1>(0,3);
+
+//	std::cout << "Translation" << std::endl;
+//	std::cout << translation << std::endl;
+
+	Eigen::Vector3f rotation;
+	Eigen::Matrix3f rot;
+	rot = transformation.block<3,3>(0,0);
+	rotation= rot.eulerAngles(0,1,2);
+
+//	std::cout << "Rotation Matrix| RPY | Yaw" << std::endl;
+//	std::cout << rot << " | " << rotation << " | "<< rotation[2] << std::endl;
+
+//	std::cout << "Translation norm | Abs(Yaw) | FitnessScore" << std::endl;
+//	std::cout << translation.norm() << " | " << std::abs(rotation[2]) << " | " << fitnessScore << std::endl;
+
+//	double sum = translation.norm() + std::abs((double)rotation[2]) + fitnessScore;
+
+//	double weight = 0.5 * (double)translation.norm()/sum + 0.1 * std::abs((double)rotation[2])/sum + 0.8 * fitnessScore/sum;
+//	double weight = 0.5 * (double)translation.norm() + 0.1 * std::abs((double)rotation[2]) + 0.8 * fitnessScore;
+//	weight = std::exp(-weight);
+
+	double weight = 0.6 * 1 / (std::sqrt(2 * M_PI * 0.1 * 0.1))
+						* std::exp(-(fitnessScore * fitnessScore) / (2 * 0.1 * 0.1));
+
+	weight += 0.4 * 0.2 * std::exp(- 0.2 * translation.norm());
+//	double weight = std::exp(-fitnessScore);
+//	std::cout << "Weight: " << weight << std::endl;
+
+	ROS_ASSERT( weight >= 0);
+//	return 1 / weight;
+	return weight;
+	//------------------------------------//
+
+//	std::cout << "----Starting ICP Procedure----" << std::endl;
 
 //	double fitnessScore;
+//	Eigen::Matrix4f transformation;
+//	PointCloudRGB transformed;
 //	if (m_RGB){
 //		pcl::GeneralizedIterativeClosestPoint6D gicp;
 //		gicp.setInputSource(pcTransformed);
 //		gicp.setInputTarget(octoMapPointCloud);
 //		gicp.setMaximumIterations(m_MaximumIterations);
 //		gicp.setTransformationEpsilon(m_TransformationEpsilon);
-//		PointCloudRGB::Ptr transformed(new PointCloudRGB);
-//		gicp.align(*transformed);
+//		gicp.align(transformed);
 //		fitnessScore = gicp.getFitnessScore();
+//		transformation = gicp.getFinalTransformation();
 //	}
 //	else {
 //		pcl::IterativeClosestPoint<PointRGBT, PointRGBT> icp;
@@ -170,138 +336,138 @@ double RGBObservationModel::measure(RobotState const & state) const {
 //		icp.setInputTarget(octoMapPointCloud);
 //		icp.setMaximumIterations(m_MaximumIterations);
 //		icp.setTransformationEpsilon(m_TransformationEpsilon);
-//		pcl::PointCloud<PointRGBT>::Ptr transformed(new pcl::PointCloud<PointRGBT>);
-//		icp.align(*transformed);
+//		icp.align(transformed);
 //		fitnessScore = icp.getFitnessScore();
+//		transformation = icp.getFinalTransformation();
 //	}
 //
-//	return 1/(fitnessScore);
-
-
-
-//	std::cerr << "pointcloud transfrom to octomap " << transformed->points.size() << " data points "<< std::endl;
-
-//    // show results
-//    pcl::visualization::PCLVisualizer viewer1("Viewer for GICP");
+////	std::cout << "Final Transformation" << std::endl;
+////	std::cout << transformation << std::endl;
 //
-//    viewer1.addPointCloud(octoMapPointCloud, "octoMap");
-//    viewer1.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 255, 0, 0, "octoMap");
+//	Eigen::Vector3f translation;
+//	translation = transformation.block<3,1>(0,3);
 //
-//    viewer1.addPointCloud(pcTransformed, "sensor");
-//    viewer1.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 255, "sensor");
+////	std::cout << "Translation" << std::endl;
+////	std::cout << translation << std::endl;
 //
-//    viewer1.addPointCloud(transformed, "transformed");
-//    viewer1.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 255, 0, "transformed");
+//	Eigen::Vector3f rotation;
+//	Eigen::Matrix3f rot;
+//	rot = transformation.block<3,3>(0,0);
+//	rotation= rot.eulerAngles(0,1,2);
 //
-//    while (!viewer1.wasStopped ())
-//      {
-//        viewer1.spinOnce (100);
-//        boost::this_thread::sleep (boost::posix_time::microseconds (100000));
-//      }
+////	std::cout << "Rotation Matrix| RPY | Yaw" << std::endl;
+////	std::cout << rot << " | " << rotation << " | "<< rotation[2] << std::endl;
+////
+////	std::cout << "Translation norm | Abs(Yaw) | FitnessScore" << std::endl;
+////	std::cout << translation.norm() << " | " << std::abs(rotation[2]) << " | " << fitnessScore << std::endl;
+//
+//	double sum = translation.norm() + std::abs((double)rotation[2]) + fitnessScore;
+//
+////	double weight = 0.4 * (double)translation.norm() + 0.1 * std::abs((double)rotation[2]) + 0.5 * fitnessScore;
+//	double weight = 0.5 * (double)translation.norm()/sum + 0.1 * std::abs((double)rotation[2])/sum + 0.7 * fitnessScore/sum;
+//	weight = std::exp(weight);
+//	//	std::cout << "Weight: " << weight << std::endl;
+//
+//	ROS_ASSERT( weight >= 1);
+//	return 1 / weight;
 
-//    std::cerr << gicp.getFitnessScore();
-//	return 1/(fitnessScore*fitnessScore);
-
-//	std::string name = "sensor.pcd";
-//	pcl::io::savePCDFileBinaryCompressed(name, *pcTransformed);
-
-//	name = "sensor" + std::to_string(rand()) + ".pcd";
-//	pcl::io::savePCDFileBinaryCompressed (name, *octoMapPointCloud);
-//	std::cerr << "Saved " << octoMapPointCloud->points.size() << " data points sensor" << std::endl;
+	//=====================================================///
 
 
-
-	boost::shared_ptr<pcl::Keypoint<PointRGBT, pcl::PointXYZI> > keypoint_detector;
-	if (m_KeypointType == 1)
-	  {
-	    pcl::SIFTKeypoint<pcl::PointXYZRGBA, pcl::PointXYZI>* sift3D = new pcl::SIFTKeypoint<pcl::PointXYZRGBA, pcl::PointXYZI>;
-	    sift3D->setScales (0.01f, 3, 2);
-	    sift3D->setMinimumContrast (0.0);
-	    keypoint_detector.reset (sift3D);
-	  }
-	  else
-	  {
-	    pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>* harris3D = new pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI> (pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::HARRIS);
-	    harris3D->setNonMaxSupression (true);
-	    harris3D->setRadius (0.01f);
-	    harris3D->setRadiusSearch (0.01f);
-	    keypoint_detector.reset (harris3D);
-	    switch (m_KeypointType)
-	    {
-	      case 2:
-	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::HARRIS);
-	      break;
-
-	      case 3:
-	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::TOMASI);
-	      break;
-
-	      case 4:
-	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::NOBLE);
-	      break;
-
-	      case 5:
-	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::LOWE);
-	      break;
-
-	      case 6:
-	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::CURVATURE);
-	      break;
-	    }
-	}
-
-	boost::shared_ptr<pcl::PCLSurfaceBase<pcl::PointXYZRGBNormal> > surface_reconstruction;
-	pcl::MarchingCubes<pcl::PointXYZRGBNormal>* mc = new pcl::MarchingCubesHoppe<pcl::PointXYZRGBNormal>;
-	mc->setIsoLevel (0.001f);
-	mc->setGridResolution (50, 50, 50);
-	surface_reconstruction.reset(mc);
-
-	  switch (m_DescriptorType)
-	  {
-	    case 1:
-	    {
-	      pcl::Feature<pcl::PointXYZRGBA, pcl::FPFHSignature33>::Ptr feature_extractor (new pcl::FPFHEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::FPFHSignature33>);
-	      feature_extractor->setSearchMethod (pcl::search::Search<pcl::PointXYZRGBA>::Ptr (new pcl::search::KdTree<pcl::PointXYZRGBA>));
-	      feature_extractor->setRadiusSearch (0.05);
-	      FeatureMatching<pcl::FPFHSignature33> tutorial (keypoint_detector, feature_extractor, surface_reconstruction, pcTransformed, octoMapPointCloud);
-	      tutorial.match ();
-	      return 1 / tutorial.getFitnessScore();
-	    }
-	    break;
-
-	    case 2:
-	    {
-	      pcl::SHOTColorEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::SHOT1344>* shot = new pcl::SHOTColorEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::SHOT1344>;
-	      shot->setRadiusSearch (0.04);
-	      pcl::Feature<pcl::PointXYZRGBA, pcl::SHOT1344>::Ptr feature_extractor (shot);
-	      FeatureMatching<pcl::SHOT1344> tutorial (keypoint_detector, feature_extractor, surface_reconstruction, pcTransformed, octoMapPointCloud);
-	      tutorial.match ();
-	  	return 1 / tutorial.getFitnessScore();
-
-	    }
-	    break;
-
-	    case 3:
-	    {
-	      pcl::Feature<pcl::PointXYZRGBA, pcl::PFHSignature125>::Ptr feature_extractor (new pcl::PFHEstimation<pcl::PointXYZRGBA, pcl::Normal, pcl::PFHSignature125>);
-	      feature_extractor->setKSearch(50);
-	      FeatureMatching<pcl::PFHSignature125> tutorial (keypoint_detector, feature_extractor, surface_reconstruction, pcTransformed, octoMapPointCloud);
-	      tutorial.match ();
-	      return 1 / tutorial.getFitnessScore();
-	    }
-	    break;
-
-	    case 4:
-	    {
-	      pcl::Feature<pcl::PointXYZRGBA, pcl::PFHRGBSignature250>::Ptr feature_extractor (new pcl::PFHRGBEstimation<pcl::PointXYZRGBA, pcl::Normal, pcl::PFHRGBSignature250>);
-	      feature_extractor->setKSearch(50);
-	      FeatureMatching<pcl::PFHRGBSignature250> tutorial (keypoint_detector, feature_extractor, surface_reconstruction, pcTransformed, octoMapPointCloud);
-	      tutorial.match ();
-	      return 1 / tutorial.getFitnessScore();
-	    }
-	    break;
-	}
-
+	///----------------Feature-Matching--------------------///
+//	boost::shared_ptr<pcl::Keypoint<PointRGBT, pcl::PointXYZI> > keypoint_detector;
+//	if (m_KeypointType == 1)
+//	{
+//		pcl::SIFTKeypoint<pcl::PointXYZRGBA, pcl::PointXYZI>* sift3D = new pcl::SIFTKeypoint<pcl::PointXYZRGBA, pcl::PointXYZI>;
+//	    sift3D->setScales (0.01f, 3, 2);
+//	    sift3D->setMinimumContrast (0.0);
+//	    keypoint_detector.reset (sift3D);
+//	} else if (m_KeypointType == 3) {
+//		pcl::ISSKeypoint3D<PointRGBT, pcl::PointXYZI> *iss3D = new pcl::ISSKeypoint3D<PointRGBT,pcl::PointXYZI>;
+//		double iss_salient_radius_;
+//		double iss_non_max_radius_;
+//		double iss_gamma_21_ (0.975);
+//		double iss_gamma_32_ (0.975);
+//		double iss_min_neighbors_ (5);
+//		pcl::search::KdTree<pcl::PointXYZRGBA>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZRGBA> ());
+//
+//		iss_salient_radius_ = 6 * m_DownsampleVoxelSize;
+//		iss_non_max_radius_ = 4 * m_DownsampleVoxelSize;
+//		iss3D->setSearchMethod(tree);
+//		iss3D->setSalientRadius(iss_salient_radius_);
+//		iss3D->setNonMaxRadius (iss_non_max_radius_);
+//		iss3D->setThreshold21 (iss_gamma_21_);
+//		iss3D->setThreshold32 (iss_gamma_32_);
+//		iss3D->setMinNeighbors (iss_min_neighbors_);
+//		iss3D->setNumberOfThreads (0);
+//		keypoint_detector.reset(iss3D);
+//	}
+//	else
+//	{
+//		pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>* harris3D = new pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI> (pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::HARRIS);
+//	    harris3D->setNonMaxSupression (true);
+//	    harris3D->setRadius (0.13f);
+//	    harris3D->setRadiusSearch (0.13f);
+//	    keypoint_detector.reset (harris3D);
+//	    switch (m_KeypointType)
+//	    {
+//	      case 2:
+//	        harris3D->setMethod(pcl::HarrisKeypoint3D<pcl::PointXYZRGBA,pcl::PointXYZI>::CURVATURE);
+//	      break;
+//	    }
+//	}
+//
+//	  switch (m_DescriptorType)
+//	  {
+//	    case 1:
+//	    {
+//	      pcl::Feature<pcl::PointXYZRGBA, pcl::FPFHSignature33>::Ptr feature_extractor (new pcl::FPFHEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::FPFHSignature33>);
+//	      feature_extractor->setSearchMethod (pcl::search::Search<pcl::PointXYZRGBA>::Ptr (new pcl::search::KdTree<pcl::PointXYZRGBA>));
+//	      feature_extractor->setRadiusSearch (0.15);
+////	      std::cout << "pcTransformed: " << *pcTransformed << std::endl;
+//	      FeatureMatching<pcl::FPFHSignature33> tutorial (keypoint_detector, feature_extractor, pcTransformed, octoMapPointCloud);
+//	      tutorial.match ();
+////	      std::cerr << "Number of Matches: " << tutorial.getCorrespondencesSize() << std::endl;
+//	      std::cerr << "Fitness Score: " << tutorial.getFitnessScore() << std::endl;
+//
+//	      while(!tutorial.visualizer_->wasStopped())
+//	      		tutorial.run();
+//	      return 1 / tutorial.getFitnessScore();
+//	    }
+//	    break;
+//
+//	    case 2:
+//	    {
+//	      pcl::SHOTColorEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::SHOT1344>* shot = new pcl::SHOTColorEstimationOMP<pcl::PointXYZRGBA, pcl::Normal, pcl::SHOT1344>;
+//	      shot->setRadiusSearch (0.02);
+//	      pcl::Feature<pcl::PointXYZRGBA, pcl::SHOT1344>::Ptr feature_extractor (shot);
+////	      std::cout << "pcTransformed: " << *pcTransformed << std::endl;
+//	      FeatureMatching<pcl::SHOT1344> tutorial (keypoint_detector, feature_extractor, pcTransformed, octoMapPointCloud);
+//	      tutorial.match ();
+////	      std::cerr << "Number of Matches: " << tutorial.getCorrespondencesSize() << std::endl;
+//	      std::cerr << "Fitness Score: " << tutorial.getFitnessScore() << std::endl;
+//
+//	      while(!tutorial.visualizer_->wasStopped())
+//	    	  tutorial.run();
+//	      return 1 / tutorial.getFitnessScore();
+//	    }
+//	    break;
+//
+//	    case 3:
+//	    {
+//	      pcl::Feature<pcl::PointXYZRGBA, pcl::PFHRGBSignature250>::Ptr feature_extractor (new pcl::PFHRGBEstimation<pcl::PointXYZRGBA, pcl::Normal, pcl::PFHRGBSignature250>);
+//	      feature_extractor->setKSearch(50);
+//	      FeatureMatching<pcl::PFHRGBSignature250> tutorial (keypoint_detector, feature_extractor, pcTransformed, octoMapPointCloud);
+//	      tutorial.match ();
+////	      std::cerr << "Number of Matches: " << tutorial.getCorrespondencesSize() << std::endl;
+//	      std::cerr << "Fitness Score: " << tutorial.getFitnessScore() << std::endl;
+//	      while(!tutorial.visualizer_->wasStopped())
+//	      		tutorial.run();
+//	      return 1 / tutorial.getFitnessScore();
+//	    }
+//	    break;
+//	}
+//
 //	tutorial.match();
 //		while(!tutorial.visualizer_.wasStopped())
 //		tutorial.run();
@@ -318,15 +484,20 @@ void RGBObservationModel::setBaseToSensorTransform(
 }
 
 void RGBObservationModel::setObservedMeasurements(
-		PointCloudRGB const & observed) {
+		PointCloudRGB::Ptr observed) {
 	m_ObservedMeasurementRGB = observed;
+	m_ObservedMeasurementRGB->is_dense = false;
 }
 
-void RGBObservationModel::setMinMax3D(PointRGBT min, PointRGBT max) {
+void RGBObservationModel::setMinMax3D(const PointRGBT &min,const PointRGBT &max) {
 	m_min3D = min;
 	m_max3D = max;
 }
 
-void RGBObservationModel::setRGB(bool const rgb) {
+void RGBObservationModel::setRGB(bool const &rgb) {
 	m_RGB = rgb;
+}
+
+void RGBObservationModel::setScenePointCloud(PointCloudRGB::Ptr scene) {
+	m_ScenePointCloud = scene;
 }

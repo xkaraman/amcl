@@ -56,7 +56,7 @@ double LaserObservationModel::measure(RobotState const & state) const {
 
 	double weight = 1.0;
 
-#pragma omp parallel  for
+//#pragma omp parallel  for
 	for (; pcIter != pcTransformed.end(); pcIter++, rangesIter++) {
 		// Probability for weight
 		double p = 0.0;

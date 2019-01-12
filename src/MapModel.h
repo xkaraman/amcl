@@ -8,7 +8,7 @@
 #ifndef INCLUDE_MAPMODEL_H_
 #define INCLUDE_MAPMODEL_H_
 
-//#include <amcl_depth_types.h>
+#include <amcl_depth_types.h>
 #include <octomap/ColorOcTree.h>
 
 #include <octomap/octomap_types.h>
@@ -65,6 +65,8 @@ public:
 	virtual ~OccupancyMap();
 
 	bool isOccupied(octomap::OcTreeNode *node) const;
+
+	PointCloudRGB toPCL();
 };
 
 #endif

@@ -89,6 +89,8 @@ private:
 	message_filters::Synchronizer<MySyncPolicy> *sync;
 
 	std::shared_ptr<MapModel> m_MapModel;
+	PointCloudRGB m_MapPointCloud;
+	PointCloudRGB::Ptr m_MapDownPointCloud;
 //	std::shared_ptr< libPF::MovementModel<RobotState> > m_MovementModel;
 	std::shared_ptr< libPF::ObservationModel<RobotState> > m_ObservationModel;
 
@@ -159,6 +161,7 @@ private:
 	double m_InitYStdDev;
 	double m_InitYawStdDev;
 	double m_DownsampleVoxelSize;
+	bool m_PublishUpdated;
 };
 
 

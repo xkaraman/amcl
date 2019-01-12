@@ -29,39 +29,6 @@ std::shared_ptr<octomap::ColorOcTree> MapModel::getMap() const {
 	return mMap;
 }
 
-//void MapModel::initGlobal(Particles &particles, Eigen::Vector3d const &initNoise,UniformDistrT &rndUniform,NormalDistrT &rndNormal) {
-//	double sizeX, sizeY, sizeZ, minX, minY, minZ;
-//
-//	ROS_INFO("Initializing for Global Localization");
-//	mMap->getMetricSize(sizeX, sizeY, sizeZ);
-//	mMap->getMetricMin(minX, minY, minZ);
-//
-//	RandomEngineT rndEngine;
-//
-//	double weight = 1.0 / particles.size();
-//
-//	Particles::iterator it;
-//
-//	for (it = particles.begin(); it < particles.end(); it++) {
-//		double x,y;
-//		x = minX + sizeX * rndUniform(rndEngine);
-//		y = minY + sizeY * rndUniform(rndEngine);
-//
-//		it->pose.position.x = x; // getOrigin().setX(x);
-//		it->pose.position.y = y; //getOrigin().setY(y);
-//
-//		it->pose.position.z = 0.0; //getOrigin().setZ(0.0); // Z unnessecary
-//
-//		double yaw = rndUniform(rndEngine) * 2 * M_PI - M_PI;
-//		tf2::Quaternion q;
-//		q.setEuler(yaw,0.0,0.0);
-//		convert(q,it->pose.orientation);
-//		it->weight = weight;
-//	}
-//
-//	ROS_INFO("Initialization Done");
-//}
-
 bool MapModel::isOccupied(const octomap::point3d& position) const{
 	octomap::OcTreeNode *ocNode = mMap->search(position);
 	if (ocNode) {
@@ -102,4 +69,21 @@ OccupancyMap::~OccupancyMap() {
 
 bool OccupancyMap::isOccupied(octomap::OcTreeNode* node) const {
 	return mMap->isNodeOccupied(node);
+}
+
+PointCloudRGB OccupancyMap::toPCL() {
+		octomap::ColorOcTree::leaf_iterator itleaf= mMap->begin_leafs();
+		octomap::ColorOcTree::leaf_iterator endleaf = mMap->end_leafs();
+		PointCloudRGB octoMapFullPointCloud;
+		for( ; itleaf!=endleaf; ++itleaf ){
+				PointRGBT tmp;
+				tmp.x = itleaf.getX();
+				tmp.y = itleaf.getY();
+				tmp.z = itleaf.getZ();
+				tmp.r = itleaf->getColor().r;
+				tmp.g = itleaf->getColor().g;
+				tmp.b = itleaf->getColor().b;
+				octoMapFullPointCloud.push_back(tmp);
+		}
+		return octoMapFullPointCloud;
 }

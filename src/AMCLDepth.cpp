@@ -19,7 +19,7 @@
 #include <rosconsole/macros_generated.h>
 
 #include <RobotMovementModel.h>
-#include <RobotObservationModel.h>
+//#include <RobotObservationModel.h>
 #include <RGBObservationModel.h>
 #include <LaserObservationModel.h>
 #include <RobotStateDistribution.h>
@@ -54,7 +54,8 @@ AMCLDepth::AMCLDepth() :
 		m_NumberOfParticles(500),
 		m_MapFrameID("map"), m_OdomFrameID("odom"), m_BaseFrameID("base_footprint"),
 		m_ReceivedSensorData(false), m_FirstRun(true),
-		m_TFBuffer(ros::Duration(10), false){
+		m_TFBuffer(ros::Duration(10), false),
+		m_MapDownPointCloud(new PointCloudRGB){
 
 	// Get Server Parameters
 	m_NH.param("num_particles",m_NumberOfParticles,500);
@@ -76,6 +77,7 @@ AMCLDepth::AMCLDepth() :
 	m_NH.param("init/yStdDev",m_InitYStdDev,0.3);
 	m_NH.param("init/yawStdDev",m_InitYawStdDev,0.2);
 
+	m_NH.param("publish_updated",m_PublishUpdated,true);
 	m_NH.param("transform_tolerance",m_TransformTolerance, 0.4);
 
 	// Models Used in Particle Filters
@@ -93,6 +95,12 @@ AMCLDepth::AMCLDepth() :
 	m_ParticleFilter = new libPF::ParticleFilter<RobotState>(
 			m_NumberOfParticles, m_ObservationModel.get(), m_MotionModel);
 
+	m_MapPointCloud = ((OccupancyMap*)(m_MapModel.get()))->toPCL();
+	pcl::VoxelGrid<PointRGBT> vg;
+	vg.setInputCloud(m_MapPointCloud.makeShared());
+	vg.setLeafSize(m_DownsampleVoxelSize,m_DownsampleVoxelSize,m_DownsampleVoxelSize);
+	vg.filter(*m_MapDownPointCloud);
+	m_RGBObs->setScenePointCloud(m_MapDownPointCloud);
 	// Initialize TF Buffer,Listeners, Broadcasters
 	m_TFBuffer.clear();
 	m_TFListener = new tf2_ros::TransformListener(m_TFBuffer);
@@ -128,6 +136,7 @@ AMCLDepth::AMCLDepth() :
 	if( m_UseLaser && !(m_UseDepth || m_UseRGB)){
 		m_LaserScanFilter = new tf2_ros::MessageFilter<sensor_msgs::LaserScan>(
 			*m_LaserScanSub, m_TFBuffer, m_OdomFrameID, 100, m_NH);
+		if(m_UseLaser)
 		m_LaserScanFilter->registerCallback(boost::bind(&AMCLDepth::laserCallback,this,_1));
 	} else {
 		sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(10),*m_LaserScanSub,*m_RGBScanSub);
@@ -144,8 +153,6 @@ AMCLDepth::AMCLDepth() :
 //			m_TFBuffer, m_OdomFrameID, 100, m_NH);
 //	if(m_UseRGB)
 //		m_RGBScanFilter->registerCallback(boost::bind(&AMCLDepth::rgbCallback, this, _1));
-
-
 
 	m_InitPoseSub = new message_filters::Subscriber<
 			geometry_msgs::PoseWithCovarianceStamped>(m_NH, "initialpose", 2);
@@ -181,7 +188,7 @@ void AMCLDepth::laserCallback(sensor_msgs::LaserScanConstPtr const &msg) {
 	double timediff = (msg->header.stamp - m_LastLaserTime).toSec();
 	if (m_ReceivedSensorData && timediff < 0) {
 		ROS_WARN(
-				"Ignoring received laser data that is %f s older than previous data!",
+				"LaserScan::Ignoring received laser data that is %f s older than previous data!",
 				timediff);
 		return;
 	}
@@ -189,14 +196,14 @@ void AMCLDepth::laserCallback(sensor_msgs::LaserScanConstPtr const &msg) {
 	geometry_msgs::PoseStamped odomPose;
 	// Check if Odometry is available otherwise skip scan
 	if (!m_MotionModel->lookupOdomPose(msg->header.stamp, odomPose)) {
-		ROS_WARN("EXITING LASER CALLBACK");
+		ROS_WARN("LaserScan::No Odometry Pose found");
 		return;
 	}
 
 	if (!m_FirstRun) {
+		ros::Time start = ros::Time::now();
 		double dt = (odomPose.header.stamp
 				- m_MotionModel->getLastOdomPose().header.stamp).toSec();
-		m_LaserIntegrated = false;
 		if (!m_ReceivedSensorData || isAboveMotionThreshold(odomPose)) {
 			PointCloud pcFiltered;
 			std::vector<float> laserRanges;
@@ -227,17 +234,14 @@ void AMCLDepth::laserCallback(sensor_msgs::LaserScanConstPtr const &msg) {
 			ros::Time past = ros::Time::now();
 //			ROS_INFO("Laser filter start in %f s", past.toSec());
 			m_ParticleFilter->filter(dt);
-			double tdiff = (ros::Time::now() - past).toSec();
+			double tdiff = (ros::Time::now() - start).toSec();
 			ROS_INFO("Laser filter done in %f s", tdiff);
 
-			m_LaserIntegrated = true;
-
-			if(!m_UseDepth) m_DepthIntegrated = true;
-			if(!m_UseRGB) m_RGBIntegrated = true;
-
-			if (m_LaserIntegrated && m_DepthIntegrated && m_RGBIntegrated)
-				m_LastLocalizedPose = odomPose.pose;
+			if(m_PublishUpdated)
+				publishPoses(msg->header.stamp);
+			m_LastLocalizedPose = odomPose.pose;
 			m_ReceivedSensorData = true;
+
 		} else {
 			m_ParticleFilter->drift(dt);
 //			ROS_INFO("laser drift");
@@ -249,9 +253,9 @@ void AMCLDepth::laserCallback(sensor_msgs::LaserScanConstPtr const &msg) {
 	m_MotionModel->setLastOdomPose(odomPose);
 	m_FirstRun = false;
 	m_LastLaserTime = msg->header.stamp;
+	if(!m_PublishUpdated)
+		publishPoses(m_LastLaserTime);
 
-	publishPoses(m_LastLaserTime);
-//	publishPoseEstimate(msg->header.stamp,sensorIntegrated);
 }
 
 void AMCLDepth::initPoseCallback(
@@ -264,16 +268,6 @@ void AMCLDepth::initPoseCallback(
 			ros::Time::now().toSec(), pose.getOrigin().getX(),
 			pose.getOrigin().getY(), tf2::getYaw(pose.getRotation()));
 
-//	float xmin = pose.getOrigin().getX() - 0.1;
-//	float xmax = pose.getOrigin().getX() + 0.1;
-//
-//	float ymin = pose.getOrigin().getY() - 0.1;
-//	float ymax = pose.getOrigin().getY() + 0.1;
-//
-//	float yawmin = tf2::getYaw(pose.getRotation()) - M_PI / 5;
-//	float yawmax = tf2::getYaw(pose.getRotation()) + M_PI / 5;
-//
-//	RobotStateDistribution distribution(xmin, xmax, ymin, ymax, yawmin, yawmax);
 	RobotStateDistribution distribution(pose.getOrigin().getX(),pose.getOrigin().getY(),tf2::getYaw(pose.getRotation()));
 	distribution.setUniform(false);
 	distribution.setStdDev(m_InitXStdDev,m_InitYStdDev,m_InitYawStdDev);
@@ -353,9 +347,8 @@ void AMCLDepth::prepareLaserPointCloud(
 		rangesSparse[i] = ranges[sampledIndices.points[i]];
 	}
 	ranges = rangesSparse;
-	ROS_INFO(
-			"Laser PointCloud subsampled: %zu from %zu (%u out of valid range)",
-			pc.size(), cloudPtr->size(), numBeamsSkipped);
+//	ROS_INFO("Laser PointCloud subsampled: %zu from %zu (%u out of valid range)",
+//			pc.size(), cloudPtr->size(), numBeamsSkipped);
 }
 
 void AMCLDepth::publishPoses(const ros::Time &t) {
@@ -407,169 +400,169 @@ void AMCLDepth::computeBestTransform(const ros::Time &t) {
 	tf2::convert(odomToMap.pose, m_LatestTransform);
 }
 
-void AMCLDepth::depthCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
-	ROS_DEBUG("Received Depth Messages at Time: %f", msg->header.stamp.toSec());
-	if (!m_Initialized) {
-		ROS_WARN(
-				"Localization not initialized yet, skipping DepthPointCloud input"
-						"\n (1) Use RVIZ 2D Pose Estimation button or"
-						"\n (2) Publish to /initialpose topic or"
-						"\n (3) Start Global Localization Service");
-		return;
-	}
-
-	double timediff = (msg->header.stamp - m_LastDepthCloudTime).toSec();
-	if (m_ReceivedSensorData && timediff < 0) {
-		ROS_WARN(
-				"Ignoring received laser data that is %f s older than previous data!",
-				timediff);
-		return;
-	}
-
-	geometry_msgs::PoseStamped odomPose;
-	// Check if Odometry is available otherwise skip scan
-	if (!m_MotionModel->lookupOdomPose(msg->header.stamp, odomPose)) {
-		ROS_WARN("EXITING DEPTH CLOUD CALLBACK");
-		return;
-	}
-
-	if (!m_FirstRun) {
-		double dt = (odomPose.header.stamp
-				- m_MotionModel->getLastOdomPose().header.stamp).toSec();
-		m_DepthIntegrated = false;
-		if (!m_ReceivedSensorData || isAboveMotionThreshold(odomPose)) {
-			PointCloud pcFiltered;
-			std::vector<float> laserRanges;
-			prepareDepthPointCloud(msg, pcFiltered, laserRanges);
-			ros::Time t = msg->header.stamp;
-			geometry_msgs::TransformStamped sensorToBase;
-			if (!m_MotionModel->lookupTargetToBaseTransform(
-					pcFiltered.header.frame_id, t, sensorToBase)) {
-				return;
-			}
-			tf2::Transform baseToSensor;
-			tf2::convert(sensorToBase.transform, baseToSensor);
-			baseToSensor = baseToSensor.inverse();
-
-			// TODO Publish filtered PointCloud
-
-			m_ObservationModel = std::shared_ptr<libPF::ObservationModel<RobotState> >( new RobotObservationModel(&m_NH, m_MapModel));
-			RobotObservationModel* depth;
-			depth = (RobotObservationModel*)m_ObservationModel.get();
-			depth->setRGB(false);
-			depth->setBaseToSensorTransform(baseToSensor);
-			depth->setObservedMeasurements(pcFiltered,laserRanges);
-
-			m_ParticleFilter->setObservationModel(depth);
-//			m_ObservationModel->setRGB(false);
-//			m_ObservationModel->setBaseToSensorTransform(baseToSensor);
-//			m_ObservationModel->setObservedMeasurements(pcFiltered,
-//					laserRanges);
-
-			ros::Time past = ros::Time::now();
-//			ROS_INFO("Depth filter start in %f s", past.toSec());
-			m_ParticleFilter->filter(dt);
-			double tdiff = (ros::Time::now() - past).toSec();
-			ROS_INFO("Depth filter done in %f s", tdiff);
-
-			m_DepthIntegrated = true;
-			if(!m_UseLaser) m_LaserIntegrated = true;
-			if(!m_UseRGB) m_RGBIntegrated = true;
-
-			if (m_LaserIntegrated && m_DepthIntegrated && m_RGBIntegrated)
-				m_LastLocalizedPose = odomPose.pose;
-			m_ReceivedSensorData = true;
-		} else {
-			m_ParticleFilter->drift(dt);
-		}
-	} else {
-		m_LastLocalizedPose = odomPose.pose;
-	}
-
-	m_MotionModel->setLastOdomPose(odomPose);
-	m_FirstRun = false;
-	m_LastDepthCloudTime = msg->header.stamp;
-
-	publishPoses(m_LastDepthCloudTime);
-}
-
-void AMCLDepth::prepareDepthPointCloud(
-		sensor_msgs::PointCloud2::ConstPtr const &msg, PointCloud &pc,
-		std::vector<float> &ranges) const {
-
-	pcl_conversions::toPCL(msg->header, pc.header);
-
-	// Convert Sensor::PointCloud2 to pcl::PointCloud<Point T>
-	PointCloud::Ptr pcTemp(new PointCloud());
-	pcl::PCLPointCloud2 pcl_pc2;
-	pcl_conversions::toPCL(*msg, pcl_pc2);
-	pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
-
-//	std::cerr << "Sensor to pcl::PointCloud<Point T>" << std::endl;
-//	std::cerr << *pcTemp << std::endl;
-
-	// Pass Through filter filtering ranges between min and max ranges
-	pcl::PassThrough<PointT> pass;
-	pass.setInputCloud(pcTemp);
-	pass.setFilterFieldName("z");
-	pass.setFilterLimits(m_FilterMinRange, m_FilterMaxRange);
-	pass.filter(*pcTemp);
-
-//	std::cerr << "Filtered Pass-through pointcloud" << std::endl;
-//	std::cerr << *pcTemp << std::endl;
-
-//	// Identify ground plane
-//	ROS_INFO("Starting Ground segmentation");
-//	PointCloud::Ptr cloudPtr;
-//	cloudPtr.reset(new PointCloud(pc));
-
-	pcl::ModelCoefficients::Ptr coef(new pcl::ModelCoefficients());
-	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-	pcl::SACSegmentation<PointT> seg;
-//	seg.setOptimizeCoefficients(true);
-	seg.setModelType(pcl::SACMODEL_PARALLEL_PLANE);
-	seg.setMethodType(pcl::SAC_RANSAC);
-	seg.setAxis(Eigen::Vector3f(0.0,0.0,1.0));
-	seg.setEpsAngle(pcl::deg2rad(10.0));
-//	seg.setMaxIterations(1000);
-	seg.setDistanceThreshold(0.01);
-	seg.setInputCloud(pcTemp);
-	seg.segment(*inliers, *coef);
-	if (inliers->indices.size() == 0) {
-		ROS_WARN("couldnt estimate a planar model");
+//void AMCLDepth::depthCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
+//	ROS_DEBUG("Received Depth Messages at Time: %f", msg->header.stamp.toSec());
+//	if (!m_Initialized) {
+//		ROS_WARN(
+//				"Localization not initialized yet, skipping DepthPointCloud input"
+//						"\n (1) Use RVIZ 2D Pose Estimation button or"
+//						"\n (2) Publish to /initialpose topic or"
+//						"\n (3) Start Global Localization Service");
 //		return;
-	}
+//	}
+//
+//	double timediff = (msg->header.stamp - m_LastDepthCloudTime).toSec();
+//	if (m_ReceivedSensorData && timediff < 0) {
+//		ROS_WARN(
+//				"Ignoring received laser data that is %f s older than previous data!",
+//				timediff);
+//		return;
+//	}
+//
+//	geometry_msgs::PoseStamped odomPose;
+//	// Check if Odometry is available otherwise skip scan
+//	if (!m_MotionModel->lookupOdomPose(msg->header.stamp, odomPose)) {
+//		ROS_WARN("EXITING DEPTH CLOUD CALLBACK");
+//		return;
+//	}
+//
+//	if (!m_FirstRun) {
+//		double dt = (odomPose.header.stamp
+//				- m_MotionModel->getLastOdomPose().header.stamp).toSec();
+//		m_DepthIntegrated = false;
+//		if (!m_ReceivedSensorData || isAboveMotionThreshold(odomPose)) {
+//			PointCloud pcFiltered;
+//			std::vector<float> laserRanges;
+//			prepareDepthPointCloud(msg, pcFiltered, laserRanges);
+//			ros::Time t = msg->header.stamp;
+//			geometry_msgs::TransformStamped sensorToBase;
+//			if (!m_MotionModel->lookupTargetToBaseTransform(
+//					pcFiltered.header.frame_id, t, sensorToBase)) {
+//				return;
+//			}
+//			tf2::Transform baseToSensor;
+//			tf2::convert(sensorToBase.transform, baseToSensor);
+//			baseToSensor = baseToSensor.inverse();
+//
+//			// TODO Publish filtered PointCloud
+//
+//			m_ObservationModel = std::shared_ptr<libPF::ObservationModel<RobotState> >( new RobotObservationModel(&m_NH, m_MapModel));
+//			RobotObservationModel* depth;
+//			depth = (RobotObservationModel*)m_ObservationModel.get();
+//			depth->setRGB(false);
+//			depth->setBaseToSensorTransform(baseToSensor);
+//			depth->setObservedMeasurements(pcFiltered,laserRanges);
+//
+//			m_ParticleFilter->setObservationModel(depth);
+////			m_ObservationModel->setRGB(false);
+////			m_ObservationModel->setBaseToSensorTransform(baseToSensor);
+////			m_ObservationModel->setObservedMeasurements(pcFiltered,
+////					laserRanges);
+//
+//			ros::Time past = ros::Time::now();
+////			ROS_INFO("Depth filter start in %f s", past.toSec());
+//			m_ParticleFilter->filter(dt);
+//			double tdiff = (ros::Time::now() - past).toSec();
+//			ROS_INFO("Depth filter done in %f s", tdiff);
+//
+//			m_DepthIntegrated = true;
+//			if(!m_UseLaser) m_LaserIntegrated = true;
+//			if(!m_UseRGB) m_RGBIntegrated = true;
+//
+//			if (m_LaserIntegrated && m_DepthIntegrated && m_RGBIntegrated)
+//				m_LastLocalizedPose = odomPose.pose;
+//			m_ReceivedSensorData = true;
+//		} else {
+//			m_ParticleFilter->drift(dt);
+//		}
+//	} else {
+//		m_LastLocalizedPose = odomPose.pose;
+//	}
+//
+//	m_MotionModel->setLastOdomPose(odomPose);
+//	m_FirstRun = false;
+//	m_LastDepthCloudTime = msg->header.stamp;
+//
+//	publishPoses(m_LastDepthCloudTime);
+//}
 
-	pcl::ExtractIndices<PointT> extract;
-
-	// Extract the outliers(non ground)
-	extract.setInputCloud(pcTemp);
-	extract.setIndices(inliers);
-	extract.setNegative(true);
-	extract.filter(*pcTemp);
-
-	// Down sample using leaf size of m
-	pcl::VoxelGrid<PointT> sor;
-	sor.setInputCloud(pcTemp);
-	sor.setLeafSize(0.5f, 0.5f, 0.5f);
-	sor.filter(pc);
-
-//  std::cerr << "Voxel grid downsampled pointcloud" << std::endl;
-//	std::cerr << pc << std::endl;
-
-//	pcl::copyPointCloud(*cloudPtr,inliers->indices,pc);
-	// adjust "ranges" array to contain the same points:
-	ranges.resize(pc.points.size());
-	for (unsigned int i = 0; i < pc.points.size(); ++i) {
-		PointT p = pc[i];
-		ranges[i] = sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-	}
-//	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
-//	std::cerr << pc << std::endl;
-
-//	ROS_INFO("Filtering DepthCloud Done");
-	m_DepthFilteredPub.publish(pc);
-}
+//void AMCLDepth::prepareDepthPointCloud(
+//		sensor_msgs::PointCloud2::ConstPtr const &msg, PointCloud &pc,
+//		std::vector<float> &ranges) const {
+//
+//	pcl_conversions::toPCL(msg->header, pc.header);
+//
+//	// Convert Sensor::PointCloud2 to pcl::PointCloud<Point T>
+//	PointCloud::Ptr pcTemp(new PointCloud());
+//	pcl::PCLPointCloud2 pcl_pc2;
+//	pcl_conversions::toPCL(*msg, pcl_pc2);
+//	pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
+//
+////	std::cerr << "Sensor to pcl::PointCloud<Point T>" << std::endl;
+////	std::cerr << *pcTemp << std::endl;
+//
+//	// Pass Through filter filtering ranges between min and max ranges
+//	pcl::PassThrough<PointT> pass;
+//	pass.setInputCloud(pcTemp);
+//	pass.setFilterFieldName("z");
+//	pass.setFilterLimits(m_FilterMinRange, m_FilterMaxRange);
+//	pass.filter(*pcTemp);
+//
+////	std::cerr << "Filtered Pass-through pointcloud" << std::endl;
+////	std::cerr << *pcTemp << std::endl;
+//
+////	// Identify ground plane
+////	ROS_INFO("Starting Ground segmentation");
+////	PointCloud::Ptr cloudPtr;
+////	cloudPtr.reset(new PointCloud(pc));
+//
+//	pcl::ModelCoefficients::Ptr coef(new pcl::ModelCoefficients());
+//	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+//	pcl::SACSegmentation<PointT> seg;
+////	seg.setOptimizeCoefficients(true);
+//	seg.setModelType(pcl::SACMODEL_PARALLEL_PLANE);
+//	seg.setMethodType(pcl::SAC_RANSAC);
+//	seg.setAxis(Eigen::Vector3f(0.0,0.0,1.0));
+//	seg.setEpsAngle(pcl::deg2rad(10.0));
+////	seg.setMaxIterations(1000);
+//	seg.setDistanceThreshold(0.01);
+//	seg.setInputCloud(pcTemp);
+//	seg.segment(*inliers, *coef);
+//	if (inliers->indices.size() == 0) {
+//		ROS_WARN("couldnt estimate a planar model");
+////		return;
+//	}
+//
+//	pcl::ExtractIndices<PointT> extract;
+//
+//	// Extract the outliers(non ground)
+//	extract.setInputCloud(pcTemp);
+//	extract.setIndices(inliers);
+//	extract.setNegative(true);
+//	extract.filter(*pcTemp);
+//
+//	// Down sample using leaf size of m
+//	pcl::VoxelGrid<PointT> sor;
+//	sor.setInputCloud(pcTemp);
+//	sor.setLeafSize(0.5f, 0.5f, 0.5f);
+//	sor.filter(pc);
+//
+////  std::cerr << "Voxel grid downsampled pointcloud" << std::endl;
+////	std::cerr << pc << std::endl;
+//
+////	pcl::copyPointCloud(*cloudPtr,inliers->indices,pc);
+//	// adjust "ranges" array to contain the same points:
+//	ranges.resize(pc.points.size());
+//	for (unsigned int i = 0; i < pc.points.size(); ++i) {
+//		PointT p = pc[i];
+//		ranges[i] = sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+//	}
+////	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
+////	std::cerr << pc << std::endl;
+//
+////	ROS_INFO("Filtering DepthCloud Done");
+//	m_DepthFilteredPub.publish(pc);
+//}
 
 bool AMCLDepth::globalLocalizationCallback(std_srvs::Empty::Request &req,
 		std_srvs::Empty::Response &res) {
@@ -602,6 +595,8 @@ bool AMCLDepth::globalLocalizationCallback(std_srvs::Empty::Request &req,
 
 void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 	ros::Time tArrived = msg->header.stamp;
+	ros::Time start = ros::Time::now();
+
 	ROS_DEBUG("Received RGB Point Messages at Time: %f",
 			msg->header.stamp.toSec());
 	if (!m_Initialized) {
@@ -620,14 +615,6 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 				timediff);
 		return;
 	}
-
-//	m_RGBCounter++;
-//	if( !( ( (m_LaserCounter - m_RGBCounter) <= 1 ) &&
-//		   ( (m_LaserCounter - m_RGBCounter) >= 0 ) )){
-//		ROS_WARN("EXITING RGB CLOUD CALLBACK, NEED LASER FIRST");
-//		m_RGBCounter--;
-//		return;
-//	}
 
 	geometry_msgs::PoseStamped odomPose;
 	// Check if Odometry is available otherwise skip scan
@@ -661,19 +648,21 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 			baseToSensor = baseToSensor.inverse();
 
 			// TODO Publish filtered PointCloud
-			m_ObservationModel = std::shared_ptr<libPF::ObservationModel<RobotState> >( new RGBObservationModel(&m_NH,m_MapModel));
-			RGBObservationModel* rgb;
-			rgb = (RGBObservationModel*)m_ObservationModel.get();
-			rgb->setBaseToSensorTransform(baseToSensor);
+//			m_ObservationModel = std::shared_ptr<libPF::ObservationModel<RobotState> >( new RGBObservationModel(&m_NH,m_MapModel));
+//			RGBObservationModel* rgb;
+//			rgb = (RGBObservationModel*)m_ObservationModel.get();
+			m_RGBObs->setBaseToSensorTransform(baseToSensor);
 
 			// Down sample using leaf size of m
-			pcl::VoxelGrid<PointRGBT> sor;
-			sor.setInputCloud(pcTemp);
-			sor.setLeafSize(0.1f, 0.1f, 0.1f);
-			sor.filter(*pcTemp);
-			rgb->setObservedMeasurements(*pcTemp);
-
-			m_ParticleFilter->setObservationModel(rgb);
+			pcl::VoxelGrid<PointRGBT> vg;
+			vg.setInputCloud(pcTemp);
+			vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
+			vg.setFilterFieldName("z");
+			vg.setFilterLimits(m_FilterMinRange,m_FilterMaxRange);
+			vg.filter(*pcTemp);
+			m_RGBObs->setObservedMeasurements(pcTemp);
+			m_RGBObs->setRGB(m_UseRGB);
+			m_ParticleFilter->setObservationModel(m_RGBObs);
 //			m_ObservationModel->setRGB(true);
 //			m_ObservationModel->setBaseToSensorTransform(baseToSensor);
 //			m_ObservationModel->setObservedMeasurements(pcFiltered, rgbRanges);
@@ -681,13 +670,15 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 			ros::Time past = ros::Time::now();
 //			ROS_INFO("RGB filter start in %f s", past.toSec());
 			m_ParticleFilter->filter(dt);
-			double tdiff = (ros::Time::now() - past).toSec();
+			double tdiff = (ros::Time::now() - start).toSec();
 			ROS_INFO("RGB filter done in %f s", tdiff);
 
 			m_RGBIntegrated = true;
 			if(!m_UseDepth) m_DepthIntegrated = true;
 			if(!m_UseLaser) m_LaserIntegrated = true;
 
+			if(m_PublishUpdated)
+				publishPoses(msg->header.stamp);
 			if (m_LaserIntegrated && m_DepthIntegrated && m_RGBIntegrated)
 				m_LastLocalizedPose = odomPose.pose;
 			m_ReceivedSensorData = true;
@@ -700,95 +691,95 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 
 	m_MotionModel->setLastOdomPose(odomPose);
 	m_FirstRun = false;
-	m_LastRGBCloudTime = tArrived;
-
-	publishPoses(m_LastRGBCloudTime);
+	m_LastRGBCloudTime = msg->header.stamp;
+	if(!m_PublishUpdated)
+		publishPoses(m_LastRGBCloudTime);
 }
-
-void AMCLDepth::prepareRGBPointCloud(
-		sensor_msgs::PointCloud2ConstPtr const &msg, PointCloudRGB &pc,
-		std::vector<float> &ranges) const {
-	pcl_conversions::toPCL(msg->header, pc.header);
-
-//	std::cerr << "Original PoinctCloud" << std::endl;
-//	std::cerr << *msg << std::endl;
-
-//	pcl::PCDWriter writer;
-	// Convert Sensor::PointCloud2 to pcl::PointCloud<PointRGB T>
-	PointCloudRGB::Ptr pcTemp(new PointCloudRGB());
-	pcl::PCLPointCloud2 pcl_pc2;
-	pcl_conversions::toPCL(*msg, pcl_pc2);
-	pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
-
-//	pcl::io::savePCDFileASCII<PointRGBT> ("sensor.pcd", *pcTemp);
-//	std::cerr << "Saved " << pcTemp->points.size () << " data points to test_pcd.pcd." << std::endl;
-//	std::cerr << "Sensor to pcl::PointCloud<Point T>" << std::endl;
-//	std::cerr << *pcTemp << std::endl;
-
-	// Pass Through filter filtering ranges between min and max ranges
-	pcl::PassThrough<PointRGBT> pass;
-	pass.setInputCloud(pcTemp);
-	pass.setFilterFieldName("z");
-	pass.setFilterLimits(m_FilterMinRange, m_FilterMaxRange);
-	pass.filter(*pcTemp);
-
-//	std::cerr << "Filtered Pass-through pointcloud" << std::endl;
-//	std::cerr << *pcTemp << std::endl;
-
-	//	// Identify ground plane
-	//	ROS_INFO("Starting Ground segmentation");
-	//	PointCloud::Ptr cloudPtr;
-	//	cloudPtr.reset(new PointCloud(pc));
-
-	pcl::ModelCoefficients::Ptr coef(new pcl::ModelCoefficients());
-	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-	pcl::SACSegmentation<PointRGBT> seg;
-	seg.setOptimizeCoefficients(true);
-	seg.setModelType(pcl::SACMODEL_PARALLEL_PLANE);
-	seg.setMethodType(pcl::SAC_RANSAC);
-	seg.setAxis(Eigen::Vector3f(0,0,1));
-	//	seg.setMaxIterations(1000);
-	seg.setDistanceThreshold(0.01);
-	seg.setInputCloud(pcTemp);
-	seg.segment(*inliers, *coef);
-	if (inliers->indices.size() == 0) {
-		ROS_WARN("couldnt estimate a planar model");
-		//		return;
-	} else {
-		pcl::ExtractIndices<PointRGBT> extract;
-
-		// Extract the outliers(non ground)
-		extract.setInputCloud(pcTemp);
-		extract.setIndices(inliers);
-		extract.setNegative(true);
-		extract.filter(*pcTemp);
-	}
-
-//	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
-//	std::cerr << *pcTemp << std::endl;
-
-	// Down sample using leaf size of m
-	pcl::VoxelGrid<PointRGBT> sor;
-	sor.setInputCloud(pcTemp);
-	sor.setLeafSize(0.5f, 0.5f, 0.5f);
-	sor.filter(pc);
-
-//	std::cerr << "Voxel grid downsampled pointcloud" << std::endl;
-//	std::cerr << pc << std::endl;
-
-	//	pcl::copyPointCloud(*cloudPtr,inliers->indices,pc);
-	// adjust "ranges" array to contain the same points:
-	ranges.resize(pc.points.size());
-	for (unsigned int i = 0; i < pc.points.size(); ++i) {
-		PointRGBT p = pc[i];
-		ranges[i] = sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
-	}
-//	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
-//	std::cerr << pc << std::endl;
-
-	//	ROS_INFO("Filtering DepthCloud Done");
-	m_DepthFilteredPub.publish(pc);
-}
+//
+//void AMCLDepth::prepareRGBPointCloud(
+//		sensor_msgs::PointCloud2ConstPtr const &msg, PointCloudRGB &pc,
+//		std::vector<float> &ranges) const {
+//	pcl_conversions::toPCL(msg->header, pc.header);
+//
+////	std::cerr << "Original PoinctCloud" << std::endl;
+////	std::cerr << *msg << std::endl;
+//
+////	pcl::PCDWriter writer;
+//	// Convert Sensor::PointCloud2 to pcl::PointCloud<PointRGB T>
+//	PointCloudRGB::Ptr pcTemp(new PointCloudRGB());
+//	pcl::PCLPointCloud2 pcl_pc2;
+//	pcl_conversions::toPCL(*msg, pcl_pc2);
+//	pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
+//
+////	pcl::io::savePCDFileASCII<PointRGBT> ("sensor.pcd", *pcTemp);
+////	std::cerr << "Saved " << pcTemp->points.size () << " data points to test_pcd.pcd." << std::endl;
+////	std::cerr << "Sensor to pcl::PointCloud<Point T>" << std::endl;
+////	std::cerr << *pcTemp << std::endl;
+//
+//	// Pass Through filter filtering ranges between min and max ranges
+//	pcl::PassThrough<PointRGBT> pass;
+//	pass.setInputCloud(pcTemp);
+//	pass.setFilterFieldName("z");
+//	pass.setFilterLimits(m_FilterMinRange, m_FilterMaxRange);
+//	pass.filter(*pcTemp);
+//
+////	std::cerr << "Filtered Pass-through pointcloud" << std::endl;
+////	std::cerr << *pcTemp << std::endl;
+//
+//	//	// Identify ground plane
+//	//	ROS_INFO("Starting Ground segmentation");
+//	//	PointCloud::Ptr cloudPtr;
+//	//	cloudPtr.reset(new PointCloud(pc));
+//
+//	pcl::ModelCoefficients::Ptr coef(new pcl::ModelCoefficients());
+//	pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+//	pcl::SACSegmentation<PointRGBT> seg;
+//	seg.setOptimizeCoefficients(true);
+//	seg.setModelType(pcl::SACMODEL_PARALLEL_PLANE);
+//	seg.setMethodType(pcl::SAC_RANSAC);
+//	seg.setAxis(Eigen::Vector3f(0,0,1));
+//	//	seg.setMaxIterations(1000);
+//	seg.setDistanceThreshold(0.01);
+//	seg.setInputCloud(pcTemp);
+//	seg.segment(*inliers, *coef);
+//	if (inliers->indices.size() == 0) {
+//		ROS_WARN("couldnt estimate a planar model");
+//		//		return;
+//	} else {
+//		pcl::ExtractIndices<PointRGBT> extract;
+//
+//		// Extract the outliers(non ground)
+//		extract.setInputCloud(pcTemp);
+//		extract.setIndices(inliers);
+//		extract.setNegative(true);
+//		extract.filter(*pcTemp);
+//	}
+//
+////	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
+////	std::cerr << *pcTemp << std::endl;
+//
+//	// Down sample using leaf size of m
+//	pcl::VoxelGrid<PointRGBT> sor;
+//	sor.setInputCloud(pcTemp);
+//	sor.setLeafSize(0.5f, 0.5f, 0.5f);
+//	sor.filter(pc);
+//
+////	std::cerr << "Voxel grid downsampled pointcloud" << std::endl;
+////	std::cerr << pc << std::endl;
+//
+//	//	pcl::copyPointCloud(*cloudPtr,inliers->indices,pc);
+//	// adjust "ranges" array to contain the same points:
+//	ranges.resize(pc.points.size());
+//	for (unsigned int i = 0; i < pc.points.size(); ++i) {
+//		PointRGBT p = pc[i];
+//		ranges[i] = sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+//	}
+////	std::cerr << "Filtered Segment(non ground) pointcloud" << std::endl;
+////	std::cerr << pc << std::endl;
+//
+//	//	ROS_INFO("Filtering DepthCloud Done");
+//	m_DepthFilteredPub.publish(pc);
+//}
 
 void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 		sensor_msgs::PointCloud2ConstPtr const & rgb) {
@@ -819,6 +810,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 	}
 
 	if (!m_FirstRun) {
+		ros::Time start = ros::Time::now();
 		double dt = (odomPose.header.stamp - m_MotionModel->getLastOdomPose().header.stamp).toSec();
 		m_LaserIntegrated = false;
 		if (!m_ReceivedSensorData || isAboveMotionThreshold(odomPose)) {
@@ -838,45 +830,39 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 
 			// TODO Publish filtered PointCloud
 
-//			m_ObservationModel = std::shared_ptr<libPF::ObservationModel<RobotState> >( new LaserObservationModel(&m_NH,m_MapModel));
-//			LaserObservationModel* laser = (LaserObservationModel*)m_ObservationModel.get();
-
 			((LaserObservationModel*)(m_ObservationModel.get()))->setBaseToSensorTransform(baseToSensor);
 			((LaserObservationModel*)(m_ObservationModel.get()))->setObservedMeasurements(pcFiltered,laserRanges);
-//			m_ObservationModel->setBaseToSensorTransform(baseToSensor);
-//			m_ObservationModel->setObservedMeasurements(pcFiltered,
-//					laserRanges);
 
-//			m_ParticleFilter->setObservationModel(m_ObservationModel.get());
-
-			ros::Time past = ros::Time::now();
+			ros::Time laserTime = ros::Time::now();
 //			ROS_INFO("Laser filter start in %f s", past.toSec());
 			m_ParticleFilter->filter(dt);
-			double tdiff = (ros::Time::now() - past).toSec();
-			ROS_INFO("Laser filter done in %f s", tdiff);
+			double tdiff = (ros::Time::now() - laserTime).toSec();
+//			ROS_INFO("Laser filter done in %f s", tdiff);
 
-			m_LaserIntegrated = true;
-
-//			libPF::ResamplingStrategy<RobotState>::ParticleList sampled;
-//			sampled.resize(10);
-//			m_ParticleFilter->getResamplingStrategy()->resample(m_ParticleFilter->m_CurrentList,sampled);
-
-//			m_RGBObs(&m_NH,m_MapModel);
-
+			// Convert to PCL Compatible and Downsample (input data)
 			PointCloudRGB::Ptr pcTemp(new PointCloudRGB());
 			pcl::PCLPointCloud2 pcl_pc2;
 			pcl_conversions::toPCL(*rgb, pcl_pc2);
 			pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
 
-			pcl::VoxelGrid<PointRGBT> sor;
-			sor.setInputCloud(pcTemp);
-			sor.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize); /// .45 for No FeatureMatching
-			sor.setDownsampleAllData(true);
-			sor.filter(*pcTemp);
+//			PointRGBT minoriginal,maxoriginal;
+//			pcl::getMinMax3D<PointRGBT>(*pcTemp,minoriginal,maxoriginal);
 
-			// make dense
-			std::vector<int> indices;
-			pcl::removeNaNFromPointCloud(*pcTemp, *pcTemp, indices);
+//			std::cout<<"Min Point at: " << minoriginal << std::endl;
+//			std::cout<<"Max Point at: " << maxoriginal << std::endl;
+
+//			DownSample Sensor Cloud
+			pcl::VoxelGrid<PointRGBT> vg;
+			vg.setInputCloud(pcTemp);
+			vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
+			vg.setFilterFieldName("z");
+			vg.setFilterLimits(m_FilterMinRange,m_FilterMaxRange);
+			vg.filter(*pcTemp);
+
+//			pcl::getMinMax3D<PointRGBT>(*pcTemp,minoriginal,maxoriginal);
+
+//			std::cout<<"Min Point Downsampled at: " << minoriginal << std::endl;
+//			std::cout<<"Max Point Downsampled at: " << maxoriginal << std::endl;
 
 			t = rgb->header.stamp;
 			if (!m_MotionModel->lookupTargetToBaseTransform(
@@ -887,46 +873,72 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			baseToSensor = baseToSensor.inverse();
 
 			m_RGBObs->setBaseToSensorTransform(baseToSensor);
-			m_RGBObs->setObservedMeasurements(*pcTemp);
+			m_RGBObs->setObservedMeasurements(pcTemp);
+//			m_RGBObs->setMinMax3D(min,max);
+
 			if(m_UseRGB)
 				m_RGBObs->setRGB(true);
 			else
 				m_RGBObs->setRGB(false);
 
-			past = ros::Time::now();
-			unsigned rgbPartToUse = m_ParticlesWithRgb;
-//			libPF::ImportanceResampling<RobotState> ir;
-//			std::vector<int> indices;
-			indices.resize(rgbPartToUse);
-//			ir.resample(m_ParticleFilter->get),indices);
-//			indices.resize(rgbPartToUse);
-//			m_ParticleFilter->resample(indices);
-			CPPRandomNumberGenerator rnd;
+			ros::Time rgbTime = ros::Time::now();
+			unsigned rgbPartToUse = std::min(m_ParticlesWithRgb,m_NumberOfParticles);
+			std::vector<int> shuffled(m_NumberOfParticles);
+			std::iota(shuffled.begin(),shuffled.end(),0);
+			std::shuffle(shuffled.begin(),shuffled.end(),std::default_random_engine());
+
+			std::vector<double> weights;
+			weights.resize(rgbPartToUse);
+			#pragma omp parallel for shared(shuffled,weights)
 			for(int it = 0; it < rgbPartToUse; it++){
 				RobotState temp;
 				double weight;
-				int pick = it;
-//				int pick = indices.at(it);
-//				int pick = int(rnd.getUniform(0,m_NumberOfParticles));
+				int pick = shuffled[it];
 				temp = m_ParticleFilter->getParticle(pick)->getState();
-				weight = m_ParticleFilter->getParticle(pick)->getWeight();
 
-				weight = weight * m_RGBObs->measure(temp);
+//				weight = m_ParticleFilter->getParticle(pick)->getWeight();
+//				weight = weight * m_RGBObs->measure(temp);
+//				m_ParticleFilter->getParticle(pick)->setWeight(weight);
+
+				//// Coherence ////////
+				weights[it] = (m_RGBObs->measure(temp));
+			}
+			// Normalize Coherence weights
+			auto result = std::minmax_element(weights.begin(),weights.end());
+			double min = weights[result.first - weights.begin()];
+			double max = weights[result.second - weights.begin()];
+			double sum = 0.0;
+			for (int it = 0; it < rgbPartToUse; it++){
+//				std::cout << "weight before:" << weights[it] << ' ' << min << ' ' << max << std::endl;
+				weights[it] = std::exp(1.0 - 15.0*(weights[it]-min)/(max-min));
+//				std::cout << "weight after:" << weights[it]<< std::endl;
+				sum += weights[it];
+			}
+
+			for (int it = 0; it < rgbPartToUse; it++){
+				weights[it] = weights[it] / sum ;
+			}
+
+			for (int it = 0; it < rgbPartToUse; it++){
+				int pick = shuffled[it];
+				double weight;
+				weight = m_ParticleFilter->getParticle(pick)->getWeight();
+				weight = weight * weights[it];
 				m_ParticleFilter->getParticle(pick)->setWeight(weight);
 			}
+
+			///////////////////////////
 			m_ParticleFilter->sort();
 			m_ParticleFilter->normalize();
-			tdiff = (ros::Time::now() - past).toSec();
-			ROS_INFO("RGB filter done in %f s", tdiff);
+			tdiff = (ros::Time::now() - rgbTime).toSec();
+//			ROS_INFO("RGB filter done in %f s", tdiff);
 
-//			if(!m_UseDepth) m_DepthIntegrated = true;
-//			if(!m_UseRGB) m_RGBIntegrated = true;
-
-//			if (m_LaserIntegrated && m_DepthIntegrated && m_RGBIntegrated)
+			if(m_PublishUpdated)
+				publishPoses(rgb->header.stamp);
 			m_LastLocalizedPose = odomPose.pose;
 			m_ReceivedSensorData = true;
 
-			tdiff = (ros::Time::now() - laser->header.stamp).toSec();
+			tdiff = (ros::Time::now() - start).toSec();
 			ROS_INFO("Filter done in %f s", tdiff);
 		} else {
 			m_ParticleFilter->drift(dt);
@@ -934,14 +946,19 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 		}
 	} else {
 		m_LastLocalizedPose = odomPose.pose;
-		ROS_INFO("Saved Pose...first run");
+//		ROS_INFO("Saved Pose...first run");
 	}
 
 	m_MotionModel->setLastOdomPose(odomPose);
 	m_FirstRun = false;
 	m_LastLaserTime = laser->header.stamp;
+	m_LastRGBCloudTime = rgb->header.stamp;
 
-	publishPoses(m_LastLaserTime);
+//	ros::Time publishTime = ros::Time::now();
+	if(!m_PublishUpdated)
+		publishPoses(m_LastRGBCloudTime);
+//	double tdiff = (ros::Time::now() - publishTime).toSec();
+//	ROS_INFO("Publish done in %f s", tdiff);
 }
 
 

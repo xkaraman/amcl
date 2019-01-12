@@ -57,16 +57,20 @@ public:
 	 * @param observed The measurements received from sensors in PoinctCloud (PCL Library)
 	 * @param ranges The ranges of each Point in PointCloud from the source of origin
 	 */
-	void setObservedMeasurements(const PointCloudRGB &observed);
+	void setObservedMeasurements(PointCloudRGB::Ptr observed);
 
-	void setRGB(const bool rgb);
+	void setScenePointCloud(PointCloudRGB::Ptr scene);
 
-	void setMinMax3D(PointRGBT min,PointRGBT max);
+	void setRGB(const bool &rgb);
+
+	void setMinMax3D(const PointRGBT &min,const PointRGBT &max);
 
 private:
 
 	tf2::Transform m_BaseToSensorTransform;
-	PointCloudRGB m_ObservedMeasurementRGB;
+	PointCloudRGB::Ptr m_ObservedMeasurementRGB;
+	PointCloudRGB::Ptr m_ScenePointCloud;
+
 	PointRGBT m_min3D;
 	PointRGBT m_max3D;
 
@@ -74,11 +78,13 @@ private:
 	std::shared_ptr<octomap::ColorOcTree> m_Map;
 
 	// User Defined Parameters for Observation Model
-	double m_DownsampleVoxelSize;
+	float m_DownsampleVoxelSize;
+	int m_OctomapDepth;
 	int m_MaximumIterations;
 	double m_TransformationEpsilon;
 	int m_KeypointType;
 	int m_DescriptorType;
+	ros::NodeHandle* m_NodeHandle;
 };
 
 #endif /* SRC_RGBOBSERVATIONMODEL_H_ */
