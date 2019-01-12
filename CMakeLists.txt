@@ -30,6 +30,8 @@ set(PACKAGE_DEPENDENCIES
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES} )
 
+find_package(OpenMP)
+
 find_package(OCTOMAP REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
 link_libraries(${OCTOMAP_LIBRARIES})
@@ -44,7 +46,12 @@ add_definitions(${PCL_DEFINITIONS})
 ## System dependencies are found with CMake's conventions
 find_package(Boost REQUIRED COMPONENTS system)
 
-SET(LIBRARIES MapModel MotionModel LaserObsModel ObservationModel RGBObsModel RobotState RobotStateDistribution RandomGenerator)
+# required for OpenMP
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+
+SET(LIBRARIES MapModel MotionModel LaserObsModel RGBObsModel RobotState RobotStateDistribution RandomGenerator)
 
 catkin_package(
 #  INCLUDE_DIRS include
@@ -64,16 +71,17 @@ include_directories(
  ${catkin_INCLUDE_DIRS}
  src 
  include/libPF/include
- #include/libColor/src
 )
 
 
 ## Declare a C++ library
 add_library(MapModel	src/MapModel.cpp)
+#target_link_libraries(MapModel OCTOMAP)
+
 add_library(MotionModel	src/RobotMovementModel.cpp)
 #target_link_libraries(MotionModel PF)
 
-add_library(ObservationModel	src/RobotObservationModel.cpp)
+#add_library(ObservationModel	src/RobotObservationModel.cpp)
 #target_link_libraries(ObservationModel PF)
 
 add_library(LaserObsModel src/LaserObservationModel.cpp)
