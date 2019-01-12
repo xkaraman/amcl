@@ -1,0 +1,17 @@
+<launch>
+<group ns="laser">
+<include file="$(find amcl_lib_pf)/launch/robot_move_map.launch">
+    <arg name="map" value="grannie"/>
+</include>
+
+<include file="$(find amcl_lib_pf)/launch/amcl_rviz_demo.launch">
+</include>
+<include file="$(find amcl_lib_pf)/launch/amcl_demo.launch">
+    <arg name="laser"	value="true"/>
+    <arg name="depth"	value="false"/>
+    <arg name="rgb"		value="false"/>
+    <arg name="particles" value="300"/>
+</include>
+</group>
+
+</launch>
