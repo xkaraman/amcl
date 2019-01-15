@@ -225,11 +225,21 @@ void ParticleFilter<StateType>::measure() {
     // apply observation model
     double weight = m_ObservationModel->measure(m_CurrentList[i]->getState());
     m_CurrentList[i]->setWeight(weight);
-    // CHANGED FROM THE OROGINAL
-//     UNCOMMENT THE ABOVE and COMMENT BELOW FOR ORIGINAL
-//    weight = m_CurrentList[i]->getWeight() * weight;
-//    m_CurrentList[i]->setWeight(weight);
   }
+
+  /////////////////////////////////////////////
+  // Only when in RGB Callback should be called
+  // Normalize Coherence weights
+//	auto result = std::minmax_element(m_CurrentList.begin(),m_CurrentList.end(),CompareParticleWeights<StateType>());
+//	double min = m_CurrentList[result.second - m_CurrentList.begin()]->getWeight();
+//	double max = m_CurrentList[result.first - m_CurrentList.begin()]->getWeight();
+//	#pragma	omp parallel for
+//	for (int it = 0; it < m_CurrentList.size(); it++){
+//		//std::cout << "weight before:" << m_CurrentList[it]->getWeight() << ' ' << min << ' ' << max << std::endl;
+//		m_CurrentList[it]->setWeight(std::exp(1.0 - 15.0*(m_CurrentList[it]->getWeight()-min)/(max-min)));
+//		//std::cout << "weight after:" << m_CurrentList[it]->getWeight() << std::endl;
+//	}
+	/////////////////////////////////////////////
   // after measurement we have to re-sort and normalize the particles
   sort();
   normalize();
