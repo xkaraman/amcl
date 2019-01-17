@@ -147,12 +147,6 @@ AMCLDepth::AMCLDepth() :
 		sync->registerCallback(boost::bind(&AMCLDepth::laserRGBCallback,this,_1,_2));
 	}
 
-//	m_DepthScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(
-//			*m_DepthScanSub, m_TFBuffer, m_OdomFrameID, 100, m_NH);
-//	if(m_UseDepth)
-//		m_DepthScanFilter->registerCallback(boost::bind(&AMCLDepth::depthCallback,this,_1));
-
-
 //	m_RGBScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(*m_RGBScanSub,
 //			m_TFBuffer, m_OdomFrameID, 100, m_NH);
 //	if(m_UseRGB)
