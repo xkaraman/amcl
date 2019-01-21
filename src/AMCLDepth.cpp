@@ -597,7 +597,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 
 			std::vector<double> weights;
 			weights.resize(rgbPartToUse);
-			#pragma omp parallel for shared(shuffled,weights)
+			#pragma omp parallel for shared(shuffled,weights) num_threads(1)
 			for(int it = 0; it < rgbPartToUse; it++){
 				RobotState temp;
 				double weight;
@@ -607,6 +607,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 				// Get Coherence as weight for each Particle
 				weights[it] = (m_RGBObs->measure(temp));
 			}
+
 			// Normalize Coherence weights
 			auto result = std::minmax_element(weights.begin(),weights.end());
 			double min = weights[result.first - weights.begin()];
@@ -619,10 +620,12 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 				sum += weights[it];
 			}
 
+			#pragma omp parallel for
 			for (int it = 0; it < rgbPartToUse; it++){
 				weights[it] = weights[it] / sum ;
 			}
 
+			#pragma omp parallel for
 			for (int it = 0; it < rgbPartToUse; it++){
 				int pick = shuffled[it];
 				double weight;
