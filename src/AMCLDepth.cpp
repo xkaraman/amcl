@@ -565,12 +565,13 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			pcl::fromPCLPointCloud2(pcl_pc2, *pcTemp);
 
 			// DownSample Sensor Cloud
+			PointCloudRGB::Ptr res(new PointCloudRGB);
 			pcl::VoxelGrid<PointRGBT> vg;
 			vg.setInputCloud(pcTemp);
 			vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
 			vg.setFilterFieldName("z");
 			vg.setFilterLimits(m_FilterMinRange,m_FilterMaxRange);
-			vg.filter(*pcTemp);
+			vg.filter(*res);
 
 			t = rgb->header.stamp;
 			if (!m_MotionModel->lookupTargetToBaseTransform(
@@ -583,7 +584,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			baseToSensor = baseToSensor.inverse();
 
 			m_RGBObs->setBaseToSensorTransform(baseToSensor);
-			m_RGBObs->setObservedMeasurements(pcTemp);
+			m_RGBObs->setObservedMeasurements(res);
 
 			// Set whether to use RGB Information or just Depth
 			m_RGBObs->setRGB(m_UseRGB);
