@@ -26,6 +26,8 @@
 #include <pcl/tracking/distance_coherence.h>
 #include <pcl/tracking/hsv_color_coherence.h>
 
+#include <pcl/search/impl/search.hpp>
+
 // Feature Matching
 #include <pcl/visualization/pcl_visualizer.h>
 
@@ -201,7 +203,7 @@ double RGBObservationModel::measure(RobotState const & state) const {
 
 	//==================================//
 
-	FeatureMatching1 feature1(m_NodeHandle,pcTransformed,m_ScenePointCloud);
+	FeatureMatching1 feature1(m_NodeHandle,pcTransformed,octoMapPointCloud);
 	feature1.setRGB(m_RGB);
 	feature1.match();
 //	while(!feature1.visualizer_.wasStopped())
