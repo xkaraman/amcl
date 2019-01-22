@@ -598,7 +598,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 
 			std::vector<double> weights;
 			weights.resize(rgbPartToUse);
-			#pragma omp parallel for shared(shuffled,weights) num_threads(1)
+			#pragma omp parallel for shared(shuffled,weights)
 			for(int it = 0; it < rgbPartToUse; it++){
 				RobotState temp;
 				double weight;
@@ -614,6 +614,8 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			double min = weights[result.first - weights.begin()];
 			double max = weights[result.second - weights.begin()];
 			double sum = 0.0;
+
+			#pragma omp parallel for reduction(+:sum)
 			for (int it = 0; it < rgbPartToUse; it++){
 //				std::cout << "weight before:" << weights[it] << ' ' << min << ' ' << max << std::endl;
 				weights[it] = std::exp(1.0 - 15.0*(weights[it]-min)/(max-min));
