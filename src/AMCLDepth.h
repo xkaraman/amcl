@@ -162,6 +162,7 @@ private:
 	double m_InitYawStdDev;
 	double m_DownsampleVoxelSize;
 	bool m_PublishUpdated;
+	__gnu_cxx:: __alloc_traits ::value_type m_alpha;
 };
 
 

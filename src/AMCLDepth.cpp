@@ -69,7 +69,7 @@ AMCLDepth::AMCLDepth() :
 	m_NH.param("threshold_translation",m_ObservationThresholdTrans,0.3);
 	m_NH.param("threshold_rotation",m_ObservationThresholdRot, 0.4);
 	m_NH.param("downsample_voxel_size",m_DownsampleVoxelSize,0.2);
-
+	m_NH.param("obs/alpha_normalization_factor",m_alpha,15.0);
 	m_NH.param("laser_min_range",m_FilterMinRange, 1.0);
 	m_NH.param("laser_max_range",m_FilterMaxRange, 6.0);
 
@@ -618,7 +618,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			#pragma omp parallel for reduction(+:sum)
 			for (int it = 0; it < rgbPartToUse; it++){
 //				std::cout << "weight before:" << weights[it] << ' ' << min << ' ' << max << std::endl;
-				weights[it] = std::exp(1.0 - 15.0*(weights[it]-min)/(max-min));
+				weights[it] = std::exp(1.0 - m_alpha*(weights[it]-min)/(max-min));
 //				std::cout << "weight after:" << weights[it]<< std::endl;
 				sum += weights[it];
 			}
