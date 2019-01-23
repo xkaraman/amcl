@@ -149,7 +149,7 @@ AMCLDepth::AMCLDepth() :
 
 //	m_RGBScanFilter = new tf2_ros::MessageFilter<sensor_msgs::PointCloud2>(*m_RGBScanSub,
 //			m_TFBuffer, m_OdomFrameID, 100, m_NH);
-//	if(m_UseRGB)
+//	if(m_UseDepth || m_UseRGB)
 //		m_RGBScanFilter->registerCallback(boost::bind(&AMCLDepth::rgbCallback, this, _1));
 
 	m_InitPoseSub = new message_filters::Subscriber<
@@ -445,7 +445,7 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 			PointCloudRGB pcFiltered;
 			std::vector<float> rgbRanges;
 
-			// Convert msg to PCL PointCloud for futher Processing
+			// Convert msg to PCL PointCloud for further Processing
 			PointCloudRGB::Ptr pcTemp(new PointCloudRGB());
 			pcl::PCLPointCloud2 pcl_pc2;
 			pcl_conversions::toPCL(*msg, pcl_pc2);
@@ -464,13 +464,14 @@ void AMCLDepth::rgbCallback(sensor_msgs::PointCloud2ConstPtr const &msg) {
 			// TODO Publish filtered PointCloud
 
 			// Down sample using leaf size of m
+			PointCloudRGB::Ptr res(new PointCloudRGB);
 			pcl::VoxelGrid<PointRGBT> vg;
 			vg.setInputCloud(pcTemp);
 			vg.setLeafSize(m_DownsampleVoxelSize, m_DownsampleVoxelSize, m_DownsampleVoxelSize);
 			vg.setFilterFieldName("z");
 			vg.setFilterLimits(m_FilterMinRange,m_FilterMaxRange);
-			vg.filter(*pcTemp);
-			m_RGBObs->setObservedMeasurements(pcTemp);
+			vg.filter(*res);
+			m_RGBObs->setObservedMeasurements(res);
 			m_RGBObs->setRGB(m_UseRGB);
 			m_RGBObs->setBaseToSensorTransform(baseToSensor);
 
