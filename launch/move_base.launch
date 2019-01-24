@@ -15,7 +15,8 @@
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/costmap_common_params.yaml"    command="load" ns="local_costmap" />
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/local_costmap_params.yaml"     command="load" />
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/global_costmap_params.yaml"    command="load" />
-	    <rosparam file="$(find amcl_lib_pf)/launch/param/dwa_local_planner_params.yaml" command="load" />					
+	    <!-- rosparam file="$(find amcl_lib_pf)/launch/param/dwa_local_planner_params.yaml" command="load" /-->
+        <rosparam file="$(find amcl_lib_pf)/launch/param/teb_local_planner_params.yaml" command="load" />
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/move_base_params.yaml"         command="load" />
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/global_planner_params.yaml"    command="load" />		
 	    <rosparam file="$(find amcl_lib_pf)/launch/param/navfn_global_planner_params.yaml"  command="load"/>
