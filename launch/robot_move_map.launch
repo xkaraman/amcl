@@ -10,6 +10,12 @@
 	<arg name="map_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).yaml"/>
 	<arg name="world_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).world"/>
 	<arg name="octomap_file" default="$(find amcl_lib_pf)/maps/$(arg map)/$(arg map).ot"/>
+	
+	<!-- Localization Parameters-->
+	<arg name="laser"	default="true"/>
+    <arg name="depth"	default="false"/>
+    <arg name="rgb"		default="false"/>
+    <arg name="particles" default="300"/>
 		
 	<!-- Launch world in gazebo with turtlebot already there -->		
 	<include file="$(find amcl_lib_pf)/launch/willow-with-turtlebot.launch">
@@ -27,7 +33,12 @@
 	</include>
 
     <!-- Load Localization Unit -->
-    <include file="$(find amcl_lib_pf)/launch/amcl_demo.launch" />
+    <include file="$(find amcl_lib_pf)/launch/amcl_demo.launch">
+        <arg name="laser"	default="$(arg laser)"/>
+        <arg name="depth"	default="$(arg depth)"/>
+        <arg name="rgb"		default="$(arg rgb)"/>
+        <arg name="particles" default="$(arg particles)"/>
+    </include>
 
 	<!-- Launch turtlebot_navigation move_base with overiden parameters -->  
 	<include file="$(find amcl_lib_pf)/launch/move_base.launch"/>
