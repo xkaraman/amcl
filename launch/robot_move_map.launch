@@ -33,12 +33,12 @@
 	</include>
 
     <!-- Load Localization Unit -->
-    <include file="$(find amcl_lib_pf)/launch/amcl_demo.launch">
+    <!--include file="$(find amcl_lib_pf)/launch/amcl_demo.launch">
         <arg name="laser"	default="$(arg laser)"/>
         <arg name="depth"	default="$(arg depth)"/>
         <arg name="rgb"		default="$(arg rgb)"/>
         <arg name="particles" default="$(arg particles)"/>
-    </include>
+    </include-->
 
 	<!-- Launch turtlebot_navigation move_base with overiden parameters -->  
 	<include file="$(find amcl_lib_pf)/launch/move_base.launch"/>
