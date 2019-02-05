@@ -50,6 +50,9 @@
 #include <pcl/common/angles.h>
 #include <pcl/common/common.h>
 
+#include <pcl/visualization/pcl_visualizer.h>
+
+
 AMCLDepth::AMCLDepth() :
 		m_NumberOfParticles(500),
 		m_MapFrameID("map"), m_OdomFrameID("odom"), m_BaseFrameID("base_footprint"),
@@ -574,6 +577,31 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 			vg.setFilterLimits(m_FilterMinRange,m_FilterMaxRange);
 			vg.filter(*res);
 
+//			pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Viewer for original clouds"));
+//			viewer->initCameraParameters ();
+//			int v1(0);
+//			viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+//			viewer->setBackgroundColor (0, 0, 0, v1);
+//			viewer->addText("Original Cloud", 10, 10, "v1 text", v1);
+//			pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> rgba(pcTemp);
+//			viewer->addPointCloud<pcl::PointXYZRGBA> (pcTemp, rgba, "sample cloud1", v1);
+//
+//			int v2(0);
+//			viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+//			viewer->setBackgroundColor (0, 0, 0, v2);
+//			viewer->addText("Downsampled Cloud", 10, 10, "v2 text", v2);
+//			pcl::visualization::PointCloudColorHandlerRGBField<pcl::PointXYZRGBA> single_color(res);
+//			viewer->addPointCloud<pcl::PointXYZRGBA> (res, single_color, "sample cloud2", v2);
+//
+//			viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud1");
+//			viewer->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "sample cloud2");
+//			viewer->addCoordinateSystem (1.0);
+//			while (!viewer->wasStopped ())
+//			{
+//				viewer->spinOnce (100);
+//				boost::this_thread::sleep(boost::posix_time::microseconds (100000));
+//			}
+
 			t = rgb->header.stamp;
 			if (!m_MotionModel->lookupTargetToBaseTransform(
 					rgb->header.frame_id, t, sensorToBase))
@@ -599,7 +627,7 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 
 			std::vector<double> weights;
 			weights.resize(rgbPartToUse);
-			#pragma omp parallel for shared(shuffled,weights)
+			#pragma omp parallel for shared(shuffled,weights) num_threads(1)
 			for(int it = 0; it < rgbPartToUse; it++){
 				RobotState temp;
 				double weight;
