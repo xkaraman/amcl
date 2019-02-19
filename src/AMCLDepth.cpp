@@ -604,13 +604,15 @@ void AMCLDepth::laserRGBCallback(sensor_msgs::LaserScanConstPtr const & laser,
 
 			t = rgb->header.stamp;
 			if (!m_MotionModel->lookupTargetToBaseTransform(
-					rgb->header.frame_id, t, sensorToBase))
+					rgb->header.frame_id, t, sensorToBase)) // Sensor frame to base frame, Data from base to sensor
 			{
 				return;
 			}
 
 			tf2::convert(sensorToBase.transform, baseToSensor);
 			baseToSensor = baseToSensor.inverse();
+
+//			cout<< sensorToBase << endl;
 
 			m_RGBObs->setBaseToSensorTransform(baseToSensor);
 			m_RGBObs->setObservedMeasurements(res);
