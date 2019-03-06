@@ -41,15 +41,12 @@ class ResamplingStrategy {
      * particle lists. The first reference refers to the old particle list, the
      * second to the new one. The strategy has to define which particles have to be copied to the new list.
      * Use the assignment operator to copy a particle. Be careful that you don't copy
-     * the pointer to the particle! Never change the size of the lists!
+     * the pointer to the particle!
      * Define this function in your sub-class!
      * @param source the source list to draw new particles from.
      * @param destination the destination list where to put the copies.
      */
     virtual void resample(const ParticleList& source, const ParticleList& destination) const = 0;
-
-    virtual void resample(const ParticleList& source, std::vector<int> &indices) const = 0;
-
 
   private:
 
