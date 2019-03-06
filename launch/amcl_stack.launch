@@ -3,26 +3,4 @@
     <node name="amcl_stack" pkg="amcl" type="amcl" output="screen">
     </node>
   
-    <node name="amcl_relay" pkg="topic_tools" type="relay_field">
-      <!-- Output -->
-      <remap from="input" to="/amcl_pose"/>
-      <remap from="output_topic" to="/amclpose"/>
-            <remap from="output_type" to="geometry_msgs/PoseStamped"/>
-      <remap from="expression" to="header:
-  seq: m.header.seq            
-  stamp:                     
-    secs: m.header.stamp.secs
-    nsecs: m.header.stamp.nsecs
-  frame_id: m.header.frame_id
-pose:                        
-  position:                    
-    x: m.pose.pose.position.x
-    y: m.pose.pose.position.y
-    z: m.pose.pose.position.z
-  orientation:               
-    x: m.pose.pose.orientation.x                  
-    y: m.pose.pose.orientation.y                 
-    z: m.pose.pose.orientation.z     
-    w: m.pose.pose.orientation.w "/>
-  </node>
 </launch>

@@ -2,5 +2,5 @@
   Used for visualising the turtlebot while building a map or navigating with the ros navistack.
  -->
 <launch>
-  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find amcl_depth)/robot_octomap.rviz"/>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find amcl_lib_pf)/robot_octomap.rviz"/>
 </launch>
