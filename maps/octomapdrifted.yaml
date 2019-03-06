@@ -1,7 +1,0 @@
-image: octomapdrifted.pgm
-resolution: 0.050000
-origin: [-16.870775, -26.007730, 0.000000]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196
-
